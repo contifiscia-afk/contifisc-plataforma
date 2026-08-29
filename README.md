@@ -34,6 +34,8 @@ tests/               Testes de infraestrutura (Vitest)
 - `docs/MCD-CHANGE-REQUEST-001_CONTIFISC_V1.0.md` (incorporado ao MCD-001 V1.1)
 - `docs/MCD-CHANGE-REQUEST-002_CONTIFISC_V1.0.md` (status: **APROVADO** — incorporado ao
   MCD-001 V1.2 e ao CDC-001 V1.2)
+- `docs/ADR-001_CONTIFISC_Schema_Fisico_PostgreSQL_Prisma_V1.0.md` (status: **PROPOSTO** — não
+  autoriza schema/migration; ver revisão técnica em `packages/core/README.md`)
 
 As versões V1.0 de MCD/CDC/DST/COT e as versões V1.1 de MCD/CDC/DST em `docs/legacy/` são
 `SUPERSEDED` e não devem orientar código novo.
