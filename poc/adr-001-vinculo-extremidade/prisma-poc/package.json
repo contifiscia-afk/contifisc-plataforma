@@ -1,0 +1,17 @@
+{
+  "name": "adr-001-poc-prisma",
+  "private": true,
+  "version": "0.0.0",
+  "description": "PoC descartavel, isolada do monorepo. NAO e o schema.prisma canonico da CONTIFISC.",
+  "type": "module",
+  "scripts": {
+    "generate": "prisma generate",
+    "test": "node run-transaction-tests.mjs"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3"
+  },
+  "devDependencies": {
+    "prisma": "6.19.3"
+  }
+}

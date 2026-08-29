@@ -1,0 +1,36 @@
+// PoC descartável — NÃO é o schema.prisma canônico da CONTIFISC.
+// Descreve só as tabelas já criadas via SQL manual (poc/adr-001-vinculo-extremidade/sql/001_schema.sql),
+// exclusivamente para testar prisma.$transaction() contra a constraint trigger diferida (ADR-C005).
+// relationMode = "foreignKeys" conforme ADR-D013 (obrigatório para o schema canônico).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider     = "postgresql"
+  url          = env("POC_DATABASE_URL")
+  relationMode = "foreignKeys"
+}
+
+model Vinculo {
+  id           String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tipoVinculo  String               @map("tipo_vinculo") @db.Text
+  extremidades VinculoExtremidade[]
+
+  @@map("vinculo")
+}
+
+model VinculoExtremidade {
+  id                 String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vinculoId          String  @map("vinculo_id") @db.Uuid
+  ladoExtremidade    String  @map("lado_extremidade") @db.Text
+  unidadeEconomicaId String? @map("unidade_economica_id") @db.Uuid
+  pessoaFisicaId     String? @map("pessoa_fisica_id") @db.Uuid
+  pessoaJuridicaId   String? @map("pessoa_juridica_id") @db.Uuid
+
+  vinculo Vinculo @relation(fields: [vinculoId], references: [id])
+
+  @@unique([vinculoId, ladoExtremidade], map: "uq_vinculo_lado")
+  @@map("vinculo_extremidade")
+}
