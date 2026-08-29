@@ -1,7 +1,7 @@
 # ADR-001 — Schema Físico PostgreSQL/Prisma da CONTIFISC
 
 **Versão:** 1.0  
-**Status:** PROPOSTO — requer aprovação antes de schema/migration (publicação corrigida por errata; ver nota abaixo)  
+**Status:** APROVADO — baseline física autorizada para PoC; schema e migrations ainda não autorizados (publicação corrigida por errata; ver nota abaixo)  
 **Tipo:** Architecture Decision Record  
 **Baseline obrigatória:** COT-001 V1.1 (publicação corrigida), MCD-001 V1.2, CDC-001 V1.2, DST-001 V1.2  
 **Escopo:** decisões físicas de persistência relacional; não altera o domínio canônico
@@ -89,7 +89,7 @@ A CONTIFISC utilizará PostgreSQL como banco relacional canônico e Prisma como 
 | ADR-C002 | vinculo_extremidade | CHECK de exatamente uma FK entre unidade_economica_id, pessoa_fisica_id, pessoa_juridica_id | Endpoint XOR. | SQL migration obrigatória. |
 | ADR-C003 | vinculo_extremidade | UNIQUE (vinculo_id, lado_extremidade) | Máximo uma ORIGEM e uma DESTINO. | Prisma @@unique + DB. |
 | ADR-C004 | vinculo_extremidade | CHECK lado_extremidade IN ('ORIGEM','DESTINO') | Enum fechado DST-E012. | DB CHECK. |
-| ADR-C005 | vinculo | Invariant: exatamente duas extremidades, ORIGEM e DESTINO | Não é garantível apenas por FK/CHECK de linha. | Constraint trigger DEFERRABLE inicialmente preferida; validar em PoC antes da migration. |
+| ADR-C005 | vinculo | Invariant: exatamente duas extremidades, ORIGEM e DESTINO (materializa a restrição normativa `COT-REL-NORM-001`, COT-001 V1.1) | Não é garantível apenas por FK/CHECK de linha. | Constraint trigger DEFERRABLE inicialmente preferida; validar em PoC antes da migration. |
 | ADR-C006 | receita_documento_fiscal | UNIQUE (receita_id, documento_fiscal_id) | Evita associação duplicada. | Prisma @@unique + DB. |
 | ADR-C007 | documento_fiscal_arquivo_origem | Unicidade mínima (documento_fiscal_id, arquivo_origem_id); revisar quando papel_arquivo fechar | Evita duplicidade sem inventar semântica do papel. | Não usar papel_arquivo em unique enquanto DST-GAP-011 aberto. |
 | ADR-C008 | classificacao_equiparacao_hospitalar | PK própria + FK receita_id + timestamps/version refs | Preserva histórico de classificação. | Sem overwrite do resultado anterior. |
@@ -98,7 +98,7 @@ A CONTIFISC utilizará PostgreSQL como banco relacional canônico e Prisma como 
 
 ### 5.1 Decisão específica sobre VinculoExtremidade
 
-O banco deve impedir estados finais com zero, uma, três ou mais extremidades. `UNIQUE(vinculo_id, lado_extremidade)` + CHECK do lado impede duplicidade, mas não garante a existência das duas linhas. A solução preferida para a primeira implementação é uma **constraint trigger DEFERRABLE INITIALLY DEFERRED** que valide, ao final da transação, exatamente duas extremidades por `vinculo_id`, uma ORIGEM e uma DESTINO. Antes da migration, Claude deverá criar uma PoC/teste PostgreSQL dessa estratégia. Se a PoC mostrar incompatibilidade operacional relevante com Prisma, o ADR deve ser revisado antes de substituir a constraint por validação apenas de aplicação.
+O banco deve impedir estados finais com zero, uma, três ou mais extremidades — esta é a materialização física da restrição normativa **`COT-REL-NORM-001`** (COT-001 V1.1 §5): todo `Vinculo` deve possuir exatamente duas `VinculoExtremidade`, uma `ORIGEM` e uma `DESTINO`. `UNIQUE(vinculo_id, lado_extremidade)` + CHECK do lado impede duplicidade, mas não garante a existência das duas linhas. A solução preferida para a primeira implementação é uma **constraint trigger DEFERRABLE INITIALLY DEFERRED** que valide, ao final da transação, exatamente duas extremidades por `vinculo_id`, uma ORIGEM e uma DESTINO. Antes da migration, Claude deverá criar uma PoC/teste PostgreSQL dessa estratégia. Se a PoC mostrar incompatibilidade operacional relevante com Prisma, o ADR deve ser revisado antes de substituir a constraint por validação apenas de aplicação.
 
 ## 6. Prisma versus PostgreSQL
 

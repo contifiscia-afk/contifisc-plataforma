@@ -2,12 +2,13 @@
 
 Reservado para o schema físico (Prisma) do Modelo Canônico de Dados.
 
-**Sem Prisma, sem migration, sem tabela nesta fase.** MCD-001 V1.2, CDC-001 V1.2, DST-001 V1.2
-e COT-001 V1.1 já são a baseline aprovada. `docs/ADR-001_CONTIFISC_Schema_Fisico_PostgreSQL_Prisma_V1.0.md`
-está com status **PROPOSTO** (não aprovado, publicação corrigida por errata) — define as
-decisões físicas propostas (constraints, índices, delete policy, mapping Prisma/PostgreSQL) mas
-não autoriza `schema.prisma`, migration ou PoC até aprovação explícita. Ver revisão técnica na
-seção abaixo.
+**Sem Prisma, sem migration nesta fase.** MCD-001 V1.2, CDC-001 V1.2, DST-001 V1.2, COT-001 V1.1
+e agora `docs/ADR-001_CONTIFISC_Schema_Fisico_PostgreSQL_Prisma_V1.0.md` são a baseline aprovada.
+O ADR-001 está com status **APROVADO — baseline física autorizada para PoC; schema e migrations
+ainda não autorizados** (publicação corrigida por errata). Isso autoriza a PoC da constraint
+diferida de `VinculoExtremidade` (ADR §5.1/§15 passo 2), mas **não** autoriza criar
+`schema.prisma` ou qualquer migration — isso continua dependente de aprovação explícita
+posterior (ADR §15 passos 3+). Ver revisão técnica na seção abaixo.
 
 MCD-001 V1.1, CDC-001 V1.1, DST-001 V1.1 e COT-001 V1.0 são `SUPERSEDED` — preservados em
 `docs/legacy/` apenas para histórico, e não orientam código novo.
@@ -57,7 +58,7 @@ que este gap é "de modelagem/validação MCD/CDC" e "não é promovido artifici
 semântico DST" — ou seja, a ausência de `DST-GAP` correspondente é intencional (não é um gap de
 enum/vocabulário), não uma omissão. Continua aberto, apenas fora do escopo do DST por desenho.
 
-## Revisão técnica do ADR-001 (status PROPOSTO) — incompatibilidades Prisma/PostgreSQL
+## Revisão técnica do ADR-001 (status APROVADO para PoC) — incompatibilidades Prisma/PostgreSQL
 
 Revisão contra o repositório atual (nenhum código de persistência existe ainda — apenas
 `packages/types` com `Uuid`/`Money`/`Competencia` como Value Objects) e contra a baseline
@@ -96,21 +97,21 @@ abaixo os reavalia já corrigidos.
 | `TIMESTAMPTZ` | Consistente. `ADR-D009` inalterado; bate com MCD-001 V1.2 (Timestamp TZ → TIMESTAMPTZ). |
 | XOR de Receita | Consistente. `ADR-C001` bate com `CDC-REL-XOR-001` (CDC-001 V1.2 §7) e com a constraint do MCD-001 V1.2 §12. |
 | XOR de `VinculoExtremidade` | Consistente. `ADR-C002` bate com `CDC-REL-XOR-002`. |
-| Constraint diferida de exatamente duas extremidades | Consistente em substância com `COT-REL-NORM-001` (COT-001 V1.1, pós-errata) e `CDC-REL-CARD-001`. **EDITORIAL:** o ADR (§5.1/`ADR-C005`) descreve a mesma regra em prosa, mas não cita `COT-REL-NORM-001` pelo ID — cross-referência por nome ajudaria a rastreabilidade, não é uma inconsistência. |
+| Constraint diferida de exatamente duas extremidades | Consistente com `COT-REL-NORM-001` (COT-001 V1.1) e `CDC-REL-CARD-001`. **EDITORIAL corrigido:** `ADR-C005` e §5.1 agora citam `COT-REL-NORM-001` explicitamente pelo ID. |
 | N:N (`ReceitaDocumentoFiscal`, `DocumentoFiscalArquivoOrigem`) | Consistente. `ADR-C006`/`C007` e a tabela de mapeamento (§3) batem com `COT-SUP-002`/`003` e `CDC-FIS-002`/`003`. |
 | Delete policies | Consistente. A política conservadora do ADR §8 (RESTRICT/NO ACTION para fatos/evidência, cascade só na linha associativa) é exatamente o que o MCD-001 V1.2 §12 delegou ao ADR ("política de deleção será definida no ADR"). |
 | Enum/Ref abertos | Consistente. `ADR-D010` e `ADR-GAP-002/003` continuam sem fechar `papel_arquivo`/`tipo_objeto`/`papel_no_conflito` (`DST-GAP-011/012/013`); nenhum enum foi inventado pela errata. |
 | Gaps deliberadamente não resolvidos | Inalterados e ainda corretos: `ADR-GAP-001..006` continuam mapeados ao registro de gaps DST/CDC/MCD acima; a errata não fechou nem tentou fechar nenhum deles. |
 
-**Achados remanescentes desta segunda rodada:**
+**Achados remanescentes:**
 
 | Severidade | Achado |
 |---|---|
-| **EDITORIAL** | ADR §5.1/`ADR-C005` não cita `COT-REL-NORM-001` pelo ID ao descrever a regra de exatamente duas extremidades — mesma substância, referência cruzada poderia ser mais explícita. |
-| **OBSERVAÇÃO** (não é achado novo, herdado da 1ª rodada, ainda válido) | Nenhum código do repositório declara dependência de Prisma ainda; a interoperabilidade do client Prisma (CJS) com `"type": "module"` em `packages/core` deve ser validada na PoC, não presumida. |
+| **OBSERVAÇÃO** (herdada, ainda válida) | Nenhum código do repositório declara dependência de Prisma ainda; a interoperabilidade do client Prisma (CJS) com `"type": "module"` em `packages/core` deve ser validada na PoC, não presumida. |
 
-**Nenhuma inconsistência CRÍTICA ou RELEVANTE remanescente** entre COT-001 V1.1 × MCD-001 V1.2 ×
-CDC-001 V1.2 × DST-001 V1.2 × ADR-001 (pós-errata).
+O achado EDITORIAL da rodada anterior (referência a `COT-REL-NORM-001`) foi corrigido no próprio
+ADR-001 antes da aprovação. **Nenhuma inconsistência CRÍTICA ou RELEVANTE remanescente** entre
+COT-001 V1.1 × MCD-001 V1.2 × CDC-001 V1.2 × DST-001 V1.2 × ADR-001 (aprovado).
 
 ## Também pendente
 
