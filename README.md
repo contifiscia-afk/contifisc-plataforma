@@ -24,16 +24,17 @@ tests/               Testes de infraestrutura (Vitest)
 ## Fontes de verdade vigentes
 
 - `docs/CAF-001_CONTIFISC_Architecture_Framework_V1.md`
-- `docs/MCD-001_CONTIFISC_Modelo_Canonico_de_Dados_V1.1.md`
-- `docs/CDC-001_CONTIFISC_Contrato_Canonico_de_Dados_V1.1.md`
-- `docs/DST-001_CONTIFISC_Dicionario_Semantico_Tributario_V1.1.md`
+- `docs/MCD-001_CONTIFISC_Modelo_Canonico_de_Dados_V1.2.md`
+- `docs/CDC-001_CONTIFISC_Contrato_Canonico_de_Dados_V1.2.md`
+- `docs/DST-001_CONTIFISC_Dicionario_Semantico_Tributario_V1.1.md` (ainda vigente — `DST-001
+  V1.2` é o próximo bloqueio documental, ainda não publicado)
 - `docs/COT-001_CONTIFISC_Catalogo_Oficial_de_Objetos_Tributarios_V1.0.md`
 - `docs/MCD-CHANGE-REQUEST-001_CONTIFISC_V1.0.md` (incorporado ao MCD-001 V1.1)
-- `docs/MCD-CHANGE-REQUEST-002_CONTIFISC_V1.0.md` (status: **PROPOSTO PARA APROVAÇÃO** — não
-  implementado)
+- `docs/MCD-CHANGE-REQUEST-002_CONTIFISC_V1.0.md` (status: **APROVADO** — incorporado ao
+  MCD-001 V1.2 e ao CDC-001 V1.2)
 
-As versões V1.0 de MCD/CDC/DST em `docs/legacy/` são `SUPERSEDED` e não devem orientar código
-novo.
+As versões V1.0 de MCD/CDC/DST e as versões V1.1 de MCD/CDC em `docs/legacy/` são `SUPERSEDED`
+e não devem orientar código novo.
 
 ## Interfaces canônicas implementadas
 

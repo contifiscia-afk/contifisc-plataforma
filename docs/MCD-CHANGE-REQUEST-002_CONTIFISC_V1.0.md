@@ -1,9 +1,9 @@
 # MCD-CHANGE-REQUEST-002 — Integridade Relacional e Consistência Estrutural
 
 **Versão:** 1.0  
-**Status:** PROPOSTO PARA APROVAÇÃO  
+**Status:** APROVADO — incorporado ao MCD-001 V1.2 e ao CDC-001 V1.2  
 **Documento-alvo:** MCD-001 V1.1  
-**Versão resultante proposta:** MCD-001 V1.2 — baseline schema-ready pré-implementação  
+**Versão resultante:** MCD-001 V1.2 — baseline schema-ready pré-implementação  
 **Dependências:** CAF-001, COT-001, MCD-001 V1.1, CDC-001 V1.1, DST-001 V1.1  
 **Origem:** gaps formais CDC-001 V1.1 + revisão de integridade relacional do MCD V1.1
 
@@ -172,5 +172,7 @@ mcd_change_request_002:
 ## 15. Decisão solicitada
 **Recomendação:** APROVAR o MCD-CHANGE-REQUEST-002 e, em seguida, emitir o **MCD-001 V1.2** incorporando as mudanças. Depois, sincronizar **CDC-001 V1.2** e **DST-001 V1.2** antes da proposta/ADR de schema Prisma.
 
+**Status final:** APROVADO. Incorporado a `MCD-001 V1.2` e `CDC-001 V1.2` (ambos vigentes). Próximo bloqueio documental: `DST-001 V1.2`. Schema físico/migration continuam não autorizados até essa sincronização e o ADR físico.
+
 ---
-**Governança:** enquanto este documento estiver `PROPOSTO PARA APROVAÇÃO`, ele não substitui o MCD-001 V1.1 e não autoriza implementação física.
+**Governança:** este documento está incorporado ao MCD-001 V1.2 e ao CDC-001 V1.2 — permanece como registro histórico da decisão, não como fonte de verdade isolada.
