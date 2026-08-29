@@ -4,9 +4,10 @@ Reservado para o schema físico (Prisma) do Modelo Canônico de Dados.
 
 **Sem Prisma, sem migration, sem tabela nesta fase.** MCD-001 V1.2, CDC-001 V1.2, DST-001 V1.2
 e COT-001 V1.1 já são a baseline aprovada. `docs/ADR-001_CONTIFISC_Schema_Fisico_PostgreSQL_Prisma_V1.0.md`
-está com status **PROPOSTO** (não aprovado) — define as decisões físicas propostas
-(constraints, índices, delete policy, mapping Prisma/PostgreSQL) mas não autoriza `schema.prisma`,
-migration ou PoC até aprovação explícita. Ver revisão técnica na seção abaixo.
+está com status **PROPOSTO** (não aprovado, publicação corrigida por errata) — define as
+decisões físicas propostas (constraints, índices, delete policy, mapping Prisma/PostgreSQL) mas
+não autoriza `schema.prisma`, migration ou PoC até aprovação explícita. Ver revisão técnica na
+seção abaixo.
 
 MCD-001 V1.1, CDC-001 V1.1, DST-001 V1.1 e COT-001 V1.0 são `SUPERSEDED` — preservados em
 `docs/legacy/` apenas para histórico, e não orientam código novo.
@@ -60,43 +61,56 @@ enum/vocabulário), não uma omissão. Continua aberto, apenas fora do escopo do
 
 Revisão contra o repositório atual (nenhum código de persistência existe ainda — apenas
 `packages/types` com `Uuid`/`Money`/`Competencia` como Value Objects) e contra a baseline
-canônica. Nenhuma correção foi aplicada ao ADR; apenas registrada aqui para decisão humana.
+canônica. Nenhuma correção foi aplicada ao ADR pela primeira revisão; os dois achados
+**RELEVANTE** dessa primeira rodada foram corrigidos por errata do próprio ADR-001 (ver
+`docs/ADR-001_..._V1.0.md`, nota de errata próxima ao cabeçalho) e a segunda rodada de auditoria
+abaixo os reavalia já corrigidos.
 
 ### Confirmado como tecnicamente correto (sem incompatibilidade)
 - `CHECK` (XOR de Receita/VinculoExtremidade, formato de `competencia`) **não é representável**
-  no `schema.prisma` — Prisma não tem sintaxe declarativa para `CHECK` até a versão usada neste
-  projeto; precisa mesmo ser SQL manual na migration, como o ADR §6 já assume corretamente.
+  no `schema.prisma` — Prisma não tem sintaxe declarativa para `CHECK`; precisa mesmo ser SQL
+  manual na migration, como o ADR §6 já assume corretamente.
 - **Constraint trigger `DEFERRABLE INITIALLY DEFERRED`** (ADR-C005/§5.1) é sintaxe PostgreSQL
   válida e Prisma não tem equivalente declarativo — precisa ser SQL manual, como já previsto.
   Confirmado que uma transação Prisma (`$transaction`, array ou interativa) mapeia para uma
   única transação Postgres, então inserir `Vinculo` + as duas `VinculoExtremidade` na mesma
   transação e deixar o trigger validar no commit é uma estratégia tecnicamente viável.
 - **Índice parcial** (`WHERE` em índice) também não é representável no `schema.prisma` — precisa
-  de SQL manual, como o ADR já assume (a tabela do ADR §6 descreve isso como "limitado/não
-  universal"; mais preciso seria "não suportado", mas a conclusão prática — SQL manual — está
-  correta).
+  de SQL manual, como o ADR já assume.
 - Evitar `enum` nativo do Postgres para vocabulário aberto/em evolução (ADR-D010) é a decisão
-  correta: alterar um `enum` nativo do Postgres via Prisma exige `ALTER TYPE ... ADD VALUE`, que
-  historicamente não podia rodar dentro da mesma transação que já usa o novo valor — problemático
-  para os enums governados pelo DST que ainda vão crescer (`DST-GAP-*`). O ADR não cita esse
-  motivo explicitamente, mas a decisão em si é sólida.
+  correta: alterar um `enum` nativo via Prisma exige `ALTER TYPE ... ADD VALUE`, historicamente
+  problemático dentro da mesma transação que já usa o novo valor — relevante para os enums
+  governados pelo DST que ainda vão crescer (`DST-GAP-*`).
 - `Money`/`Competencia` já implementados em `packages/types` são consistentes com `NUMERIC(18,2)`
-  (escala de 2 casas) e com `competencia` como string opaca `YYYY-MM` (não `Date`) — nenhuma
-  incompatibilidade entre o repositório atual e o ADR.
+  (escala de 2 casas) e com `competencia` como string opaca `YYYY-MM` (não `Date`).
 
-### Achados (não corrigidos — apenas reportados)
+### Segunda rodada de auditoria (pós-errata) — checklist específico
+
+| Item | Situação |
+|---|---|
+| `relationMode` | **Corrigido.** `ADR-D013` fixa `foreignKeys`, proíbe `"prisma"`, exige novo ADR/revisão formal para mudar, e exige verificação explícita na revisão futura do `schema.prisma` (§6 regra operacional + MIG-009). |
+| Tipos UUID | Consistente. `ADR-D004`/`D005` (PK/FK `uuid`) batem com MCD-001 V1.2 (`ids: uuid`) e com os campos `*_id` de `VinculoExtremidade` (MCD-F2523..525). |
+| `NUMERIC(18,2)` | Consistente. `ADR-D006` inalterado; bate com MCD-001 V1.2 §5 e com `Money` já implementado em `packages/types`. |
+| `NUMERIC(7,4)` | **Corrigido.** `ADR-D007` agora materializa `NUMERIC(7,4)` diretamente, citando MCD-001 V1.2 §5; não reabre a escala. |
+| `VARCHAR(7)` + CHECK competência | **Corrigido.** `ADR-D008` e §4 agora usam exclusivamente `VARCHAR(7)`; `CHAR(7)` removido de toda decisão vigente (permanece só na nota de errata, como registro do que foi corrigido). CHECK de formato/mês continua obrigatório (`ADR-C009`). |
+| `TIMESTAMPTZ` | Consistente. `ADR-D009` inalterado; bate com MCD-001 V1.2 (Timestamp TZ → TIMESTAMPTZ). |
+| XOR de Receita | Consistente. `ADR-C001` bate com `CDC-REL-XOR-001` (CDC-001 V1.2 §7) e com a constraint do MCD-001 V1.2 §12. |
+| XOR de `VinculoExtremidade` | Consistente. `ADR-C002` bate com `CDC-REL-XOR-002`. |
+| Constraint diferida de exatamente duas extremidades | Consistente em substância com `COT-REL-NORM-001` (COT-001 V1.1, pós-errata) e `CDC-REL-CARD-001`. **EDITORIAL:** o ADR (§5.1/`ADR-C005`) descreve a mesma regra em prosa, mas não cita `COT-REL-NORM-001` pelo ID — cross-referência por nome ajudaria a rastreabilidade, não é uma inconsistência. |
+| N:N (`ReceitaDocumentoFiscal`, `DocumentoFiscalArquivoOrigem`) | Consistente. `ADR-C006`/`C007` e a tabela de mapeamento (§3) batem com `COT-SUP-002`/`003` e `CDC-FIS-002`/`003`. |
+| Delete policies | Consistente. A política conservadora do ADR §8 (RESTRICT/NO ACTION para fatos/evidência, cascade só na linha associativa) é exatamente o que o MCD-001 V1.2 §12 delegou ao ADR ("política de deleção será definida no ADR"). |
+| Enum/Ref abertos | Consistente. `ADR-D010` e `ADR-GAP-002/003` continuam sem fechar `papel_arquivo`/`tipo_objeto`/`papel_no_conflito` (`DST-GAP-011/012/013`); nenhum enum foi inventado pela errata. |
+| Gaps deliberadamente não resolvidos | Inalterados e ainda corretos: `ADR-GAP-001..006` continuam mapeados ao registro de gaps DST/CDC/MCD acima; a errata não fechou nem tentou fechar nenhum deles. |
+
+**Achados remanescentes desta segunda rodada:**
 
 | Severidade | Achado |
 |---|---|
-| **RELEVANTE** | ADR não fixa `relationMode` do Prisma. Se um `schema.prisma` futuro for gerado com `relationMode = "prisma"` (FKs emuladas no client, não no banco), toda a premissa do ADR — "constraints ficam no PostgreSQL, Prisma é subordinado" — quebra silenciosamente, porque os `ON DELETE`/`ON UPDATE` e a integridade referencial deixam de ser garantidos pelo banco. O ADR deveria declarar explicitamente `relationMode = "foreignKeys"` (padrão) como decisão obrigatória. |
-| **RELEVANTE** | ADR-D007 (percentuais) deixa a escala "a definir por campo/ADR específico", mas o MCD-001 V1.2 §5 já fixa `NUMERIC(7,4)` para todo campo percentual. O ADR deveria referenciar essa escala já definida em vez de deixá-la em aberto — risco de alguém implementar com escala inconsistente. |
-| **EDITORIAL** | ADR não declara uma versão mínima do PostgreSQL. `gen_random_uuid()` nativo (sem extensão `pgcrypto`) só existe a partir do PostgreSQL 13. Improvável ser um problema real (Neon/Supabase/RDS já operam em versões recentes), mas o ADR deveria declarar isso como premissa explícita. |
-| **EDITORIAL** | `char(7)` (ADR §4, escolha preferida para `competencia`) é desaconselhado pela própria documentação do PostgreSQL a favor de `varchar`/`text`, por causa de padding e semântica de comparação com espaços — não é um problema prático aqui (toda `competencia` válida já tem exatamente 7 caracteres), mas `varchar(7)` seria a escolha mais idiomática sem custo algum. |
-| **OBSERVAÇÃO** | Nenhum código do repositório hoje declara dependência de Prisma (não há `prisma` em nenhum `package.json`) — não há conflito de versão a verificar ainda. `tsconfig.base.json` usa `moduleResolution: "Bundler"` com `esModuleInterop: true`, compatível com o client gerado pelo Prisma; só vale reconfirmar isso quando `packages/core` ganhar `"type": "module"` (os demais pacotes já têm) — o client padrão do Prisma é CJS e a interop deve ser testada na PoC, não presumida. |
+| **EDITORIAL** | ADR §5.1/`ADR-C005` não cita `COT-REL-NORM-001` pelo ID ao descrever a regra de exatamente duas extremidades — mesma substância, referência cruzada poderia ser mais explícita. |
+| **OBSERVAÇÃO** (não é achado novo, herdado da 1ª rodada, ainda válido) | Nenhum código do repositório declara dependência de Prisma ainda; a interoperabilidade do client Prisma (CJS) com `"type": "module"` em `packages/core` deve ser validada na PoC, não presumida. |
 
-Nenhuma inconsistência **CRÍTICA** foi encontrada — nada no ADR impede tecnicamente a PoC ou o
-desenho do schema. Os dois achados **RELEVANTE** deveriam ser esclarecidos no ADR antes da
-aprovação, mas não bloqueiam a leitura/uso do documento como proposta.
+**Nenhuma inconsistência CRÍTICA ou RELEVANTE remanescente** entre COT-001 V1.1 × MCD-001 V1.2 ×
+CDC-001 V1.2 × DST-001 V1.2 × ADR-001 (pós-errata).
 
 ## Também pendente
 

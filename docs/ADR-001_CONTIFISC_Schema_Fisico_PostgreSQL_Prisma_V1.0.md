@@ -1,12 +1,23 @@
 # ADR-001 — Schema Físico PostgreSQL/Prisma da CONTIFISC
 
 **Versão:** 1.0  
-**Status:** PROPOSTO — requer aprovação antes de schema/migration  
+**Status:** PROPOSTO — requer aprovação antes de schema/migration (publicação corrigida por errata; ver nota abaixo)  
 **Tipo:** Architecture Decision Record  
 **Baseline obrigatória:** COT-001 V1.1 (publicação corrigida), MCD-001 V1.2, CDC-001 V1.2, DST-001 V1.2  
 **Escopo:** decisões físicas de persistência relacional; não altera o domínio canônico
 
 > Este ADR traduz a baseline canônica para PostgreSQL/Prisma. Quando houver conflito, COT/MCD/CDC/DST prevalecem. O schema físico não pode criar significado tributário novo.
+
+### Errata de publicação V1.0
+
+Antes da aprovação, esta publicação foi corrigida em quatro pontos, sem mudança conceitual e
+sem criar schema, migration ou PoC: (1) fixado `relationMode = "foreignKeys"` do Prisma como
+decisão obrigatória (ADR-D013), proibindo `relationMode = "prisma"` no schema canônico; (2)
+`ADR-D007` deixava de materializar a escala de percentuais já fixada em `NUMERIC(7,4)` pelo
+MCD-001 V1.2 §5 — corrigido para citar essa escala diretamente, sem reabrir a decisão; (3) a
+escolha física preferencial de `competencia` foi corrigida de `CHAR(7)` para `VARCHAR(7)`,
+mantendo o CHECK de formato/mês obrigatório; (4) declarada `PostgreSQL >= 15` como baseline
+técnica (ADR-D014), sem vincular o domínio canônico a essa versão especificamente.
 
 ## 1. Contexto e decisão
 
@@ -22,12 +33,14 @@ A CONTIFISC utilizará PostgreSQL como banco relacional canônico e Prisma como 
 | ADR-D004 | PK | id UUID | UUID para identidade canônica e integração distribuída. |
 | ADR-D005 | FK | <objeto>_id UUID | Mesmo nome canônico do MCD sempre que aplicável. |
 | ADR-D006 | Valores monetários | NUMERIC(18,2) | Float/double proibidos para dinheiro. |
-| ADR-D007 | Percentuais | NUMERIC com escala definida por campo | Escala deve vir do MCD/ADR específico; não usar float. |
-| ADR-D008 | Competência | CHAR(7)/VARCHAR(7) + CHECK YYYY-MM | Competência não é DATE; primeiro dia fictício é proibido. |
+| ADR-D007 | Percentuais | NUMERIC(7,4) | Escala já fixada pelo MCD-001 V1.2 §5 (32,0000 = 32%); não é reaberta aqui. TypeScript/Prisma preservam precisão decimal — nunca convertem percentual para `number`/float em cálculo tributário. |
+| ADR-D008 | Competência | VARCHAR(7) + CHECK YYYY-MM | Competência não é DATE; primeiro dia fictício é proibido. `VARCHAR(7)` substitui `CHAR(7)` (errata) — mesma largura útil, sem o padding/semântica de comparação problemática do `CHAR`. |
 | ADR-D009 | Timestamps | TIMESTAMPTZ | Persistência temporal inequívoca; aplicação converte para apresentação. |
 | ADR-D010 | Enums | Texto/código canônico + CHECK/lookup conforme estabilidade | Evita acoplamento prematuro a PostgreSQL ENUM; Enum/Ref aberto não recebe CHECK fechado. |
 | ADR-D011 | Soft lifecycle | status_registro/processamento/qualidade; sem hard delete por padrão | Fatos/evidências/auditoria preservam histórico. |
 | ADR-D012 | Proveniência | Metadados canônicos preservados; RAW imutável | Reprocessamento não destrói evidência. |
+| ADR-D013 | Prisma relationMode | `relationMode = "foreignKeys"` (obrigatório) | A integridade referencial permanece no PostgreSQL, nunca emulada no client. `relationMode = "prisma"` é **proibido** para o schema canônico da CONTIFISC — mudar essa decisão exige novo ADR ou revisão formal deste. A futura revisão do `schema.prisma` deve verificar explicitamente essa configuração antes de qualquer migration. |
+| ADR-D014 | Versão mínima do PostgreSQL | PostgreSQL >= 15 | Baseline técnica declarada para viabilizar recursos usados neste ADR (ex.: `gen_random_uuid()` nativo). Não vincula o domínio canônico a uma versão específica. A versão efetivamente usada em desenvolvimento/staging/produção deve ser registrada e validada antes da primeira migration; recursos específicos de versão devem ser verificados contra essa baseline. |
 
 ## 3. Mapeamento inicial de objetos/estruturas para relações físicas
 
@@ -62,7 +75,7 @@ A CONTIFISC utilizará PostgreSQL como banco relacional canônico e Prisma como 
 - Colunas: nomes MCD em `snake_case`; PK `id`; FK `<objeto>_id`.
 - UUID: PostgreSQL `uuid`; geração preferencial na aplicação/Prisma ou `gen_random_uuid()` quando a estratégia de migration for fechada; não misturar estratégias sem motivo.
 - Dinheiro: `numeric(18,2)`; TypeScript deve tratar Decimal explicitamente, nunca converter silenciosamente para `number` em cálculo tributário.
-- Competência: string canônica `YYYY-MM`; no banco usar `char(7)` ou `varchar(7)` com CHECK de formato/mês. A escolha final preferida é `char(7)` pela largura invariável.
+- Competência: string canônica `YYYY-MM`; no banco usar `varchar(7)` com CHECK de formato/mês (ADR-D008). Nunca converter para `date` com primeiro dia fictício.
 - Datas civis: `date`. Instantes de auditoria/processamento: `timestamptz`.
 - Booleanos seguem nomes canônicos `eh_*`, `possui_*`, `permite_*`.
 - Enums fechados do DST podem receber CHECK; Enum/Ref aberto permanece texto/ref sem lista inventada.
@@ -99,8 +112,9 @@ O banco deve impedir estados finais com zero, uma, três ou mais extremidades. `
 | Partial index | Limitado/não universal no schema | Nativo | SQL manual quando aprovado. |
 | Decimal | Decimal | NUMERIC | Usar Decimal ponta a ponta. |
 | Enum aberto | Não usar enum fechado | TEXT/REF | Sem inventar valores. |
+| relationMode | `foreignKeys` (obrigatório, ADR-D013) | FK nativa | `relationMode = "prisma"` proibido; integridade referencial fica no PostgreSQL, nunca emulada no client. |
 
-**Regra operacional:** `prisma migrate` não pode apagar SQL manual de constraints. Toda regeneração de migration deve ser revisada por diff.
+**Regra operacional:** `prisma migrate` não pode apagar SQL manual de constraints. Toda regeneração de migration deve ser revisada por diff. Toda revisão futura do `schema.prisma` deve verificar explicitamente que `relationMode = "foreignKeys"` permanece configurado.
 
 ## 7. Índices
 
@@ -156,6 +170,8 @@ A CONTIFISC é multi-tenant, mas a estratégia física de tenant isolation **nã
 - **MIG-005:** Schema físico deve ser validado contra COT/MCD/CDC/DST antes de merge.
 - **MIG-006:** Ambientes dev/test/staging/prod usam a mesma cadeia de migrations.
 - **MIG-007:** Primeira migration só pode ser criada após aprovação explícita deste ADR.
+- **MIG-008:** A versão do PostgreSQL efetivamente usada em desenvolvimento/staging/produção deve ser registrada e validada contra a baseline `PostgreSQL >= 15` (ADR-D014) antes da primeira migration; recursos específicos de versão são verificados contra essa baseline, não presumidos.
+- **MIG-009:** Antes de qualquer migration, confirmar que `schema.prisma` declara `relationMode = "foreignKeys"` (ADR-D013).
 
 ## 13. Testes obrigatórios do schema
 
@@ -207,6 +223,8 @@ Testes de constraints PostgreSQL devem ser de integração contra PostgreSQL rea
 - [ ] Define N:N e unicidade.
 - [ ] Define delete/history conservador.
 - [ ] Separa Prisma de autoridade PostgreSQL.
+- [ ] Fixa `relationMode = "foreignKeys"` e proíbe `relationMode = "prisma"`.
+- [ ] Declara baseline `PostgreSQL >= 15` sem vincular o domínio canônico à versão.
 - [ ] Não fecha Enum/Ref aberto.
 - [ ] Não usa UE como tenant de segurança.
 - [ ] Bloqueia auth/SEC e regras tributárias ainda não aprovadas.
