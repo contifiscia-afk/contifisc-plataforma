@@ -1,12 +1,26 @@
 # COT-001 — Catálogo Oficial de Objetos Tributários da CONTIFISC
 
 **Versão:** 1.1  
-**Status:** APROVADO — alinhado com MCD-001 V1.2, CDC-001 V1.2 e DST-001 V1.2  
+**Status:** APROVADO — alinhado com MCD-001 V1.2, CDC-001 V1.2 e DST-001 V1.2 (publicação corrigida por errata; ver nota abaixo)  
 **Supersede:** COT-001 V1.0  
 **Dependências:** CAF-001, MCD-001 V1.2, CDC-001 V1.2, DST-001 V1.2  
 **Consumidores:** ADR físico, Prisma, APIs, RGT-001, EVT-001, INT-001, ATI-001, GTI-001, MIT-001 e Skills
 
 > O COT define o que existe no domínio e quais estruturas relacionais são necessárias para preservar sua integridade. Ele não define tabelas finais, regras tributárias nem autorização automática para migrations.
+
+### Errata de publicação V1.1
+
+A primeira publicação da V1.1 reutilizou os IDs `COT-REL-001..020` do catálogo de
+relacionamentos da COT-001 V1.0 para relacionamentos com significado diferente, contrariando o
+princípio de governança "IDs nunca são reutilizados com outro significado" (MCD-001 V1.2 §2). A
+presente publicação corrige isso sem qualquer mudança conceitual: os relacionamentos vigentes
+passam a usar a faixa `COT-REL-101..120`, ainda não utilizada por nenhuma versão do COT. Os IDs
+`COT-REL-001..020` permanecem exclusivamente como histórico da V1.0, preservados em
+`docs/legacy/COT-001_CONTIFISC_Catalogo_Oficial_de_Objetos_Tributarios_V1.0.md`, e não devem ser
+reutilizados novamente. Esta errata também corrige a cardinalidade de `Vinculo` →
+`VinculoExtremidade`, publicada por engano como `1:2` (notação não padronizada) — o
+relacionamento estrutural é `1:N`, com a exigência de exatamente duas extremidades expressa
+separadamente como restrição normativa, não como cardinalidade.
 
 ## 1. Objetivo da V1.1
 
@@ -72,28 +86,38 @@
 
 | ID | Origem | Destino | Cardinalidade | Regra |
 |---|---|---|---|---|
-| COT-REL-001 | Vinculo | VinculoExtremidade | 1:2 | Todo Vinculo possui exatamente duas extremidades. |
-| COT-REL-002 | VinculoExtremidade | UnidadeEconomica/PessoaFisica/PessoaJuridica | N:1 XOR | Cada extremidade referencia exatamente um tipo de endpoint por FK real. |
-| COT-REL-003 | PessoaFisica | PessoaJuridica | N:N via Vinculo | Sociedade/pró-labore e outros papéis usam Vinculo; sem FK ad-hoc. |
-| COT-REL-004 | PessoaFisica | Receita | 1:N condicional | PF pode ser titular; Receita exige XOR PF/PJ. |
-| COT-REL-005 | PessoaJuridica | Receita | 1:N condicional | PJ pode ser titular; Receita exige XOR PF/PJ. |
-| COT-REL-006 | Receita | DocumentoFiscal | N:N via COT-SUP-002 | Associação explícita e única por par. |
-| COT-REL-007 | DocumentoFiscal | ArquivoOrigem | N:N via COT-SUP-003 | Documento pode possuir múltiplas evidências RAW; papel do arquivo é semântica pendente DST. |
-| COT-REL-008 | Receita | ClassificacaoEquiparacaoHospitalar | 1:N | Histórico versionado de classificações. |
-| COT-REL-009 | PessoaFisica | ContribuicaoPrevidenciaria | 1:N | Contribuições pertencem à PF por competência. |
-| COT-REL-010 | VinculoPrevidenciario | ContribuicaoPrevidenciaria | 1:N | Vínculo/fonte agrupa contribuições. |
-| COT-REL-011 | PessoaFisica | EventoIRPF | 1:N | Eventos IRPF pertencem à PF. |
-| COT-REL-012 | FontePagadora | Receita | 1:N | Fonte pode originar múltiplas receitas. |
-| COT-REL-013 | FontePagadora | EventoIRPF | 1:N | Fonte pode originar múltiplos eventos. |
-| COT-REL-014 | UnidadeEconomica | CenarioTributario | 1:N | Cenários avaliam UE sem alterar fatos. |
-| COT-REL-015 | CenarioTributario | ResultadoCalculo | 1:N | Cenário possui resultados reproduzíveis. |
-| COT-REL-016 | ConflitoDado | ConflitoDadoItem | 1:N | Conflito registra participantes/fontes estruturados. |
-| COT-REL-017 | ConflitoDado | RevisaoTecnica | 1:N | Conflito pode receber revisões auditáveis. |
-| COT-REL-018 | ClassificacaoEquiparacaoHospitalar | RevisaoTecnica | 1:N | Classificação pode exigir revisão humana. |
-| COT-REL-019 | ContaAcesso | PessoaFisica | 0..N:0..1 | Associação opcional; PF não é identidade de login. |
-| COT-REL-020 | ContaAcesso | CredencialAcesso | 1:N | Conta pode ter múltiplos autenticadores; SEC separado. |
+| COT-REL-101 | Vinculo | VinculoExtremidade | 1:N | Ver restrição normativa COT-REL-NORM-001 abaixo: exatamente duas extremidades por Vinculo. |
+| COT-REL-102 | VinculoExtremidade | UnidadeEconomica/PessoaFisica/PessoaJuridica | N:1 XOR | Cada extremidade referencia exatamente um tipo de endpoint por FK real. |
+| COT-REL-103 | PessoaFisica | PessoaJuridica | N:N via Vinculo | Sociedade/pró-labore e outros papéis usam Vinculo; sem FK ad-hoc. |
+| COT-REL-104 | PessoaFisica | Receita | 1:N condicional | PF pode ser titular; Receita exige XOR PF/PJ. |
+| COT-REL-105 | PessoaJuridica | Receita | 1:N condicional | PJ pode ser titular; Receita exige XOR PF/PJ. |
+| COT-REL-106 | Receita | DocumentoFiscal | N:N via COT-SUP-002 | Associação explícita e única por par. |
+| COT-REL-107 | DocumentoFiscal | ArquivoOrigem | N:N via COT-SUP-003 | Documento pode possuir múltiplas evidências RAW; papel do arquivo é semântica pendente DST. |
+| COT-REL-108 | Receita | ClassificacaoEquiparacaoHospitalar | 1:N | Histórico versionado de classificações. |
+| COT-REL-109 | PessoaFisica | ContribuicaoPrevidenciaria | 1:N | Contribuições pertencem à PF por competência. |
+| COT-REL-110 | VinculoPrevidenciario | ContribuicaoPrevidenciaria | 1:N | Vínculo/fonte agrupa contribuições. |
+| COT-REL-111 | PessoaFisica | EventoIRPF | 1:N | Eventos IRPF pertencem à PF. |
+| COT-REL-112 | FontePagadora | Receita | 1:N | Fonte pode originar múltiplas receitas. |
+| COT-REL-113 | FontePagadora | EventoIRPF | 1:N | Fonte pode originar múltiplos eventos. |
+| COT-REL-114 | UnidadeEconomica | CenarioTributario | 1:N | Cenários avaliam UE sem alterar fatos. |
+| COT-REL-115 | CenarioTributario | ResultadoCalculo | 1:N | Cenário possui resultados reproduzíveis. |
+| COT-REL-116 | ConflitoDado | ConflitoDadoItem | 1:N | Conflito registra participantes/fontes estruturados. |
+| COT-REL-117 | ConflitoDado | RevisaoTecnica | 1:N | Conflito pode receber revisões auditáveis. |
+| COT-REL-118 | ClassificacaoEquiparacaoHospitalar | RevisaoTecnica | 1:N | Classificação pode exigir revisão humana. |
+| COT-REL-119 | ContaAcesso | PessoaFisica | 0..N:0..1 | Associação opcional; PF não é identidade de login. |
+| COT-REL-120 | ContaAcesso | CredencialAcesso | 1:N | Conta pode ter múltiplos autenticadores; SEC separado. |
 
-**Governança de IDs:** os IDs `COT-REL-001..020` são redefinidos nesta V1.1 como catálogo vigente de relacionamentos. Para auditoria histórica, a semântica V1.0 permanece preservada no documento `legacy`; código novo deve referenciar a V1.1. Nenhum relacionamento físico deve ser inferido apenas pelo número do ID sem versão do COT.
+**Restrição normativa COT-REL-NORM-001 (Vinculo ↔ VinculoExtremidade):** independentemente da
+cardinalidade estrutural `1:N` de `COT-REL-101`, todo `Vinculo` deve possuir **exatamente duas**
+`VinculoExtremidade`: uma com `lado_extremidade = ORIGEM` e outra com `lado_extremidade =
+DESTINO`. Esta é uma restrição de integridade (cardinalidade exata), não uma cardinalidade
+estrutural `1:2` — consistente com `CDC-REL-CARD-001` (CDC-001 V1.2 §7).
+
+**Governança de IDs:** os relacionamentos vigentes usam a faixa `COT-REL-101..120`, introduzida
+nesta errata da V1.1 especificamente para não colidir com os IDs `COT-REL-001..020` do COT-001
+V1.0, que permanecem preservados com seu significado original em
+`docs/legacy/COT-001_CONTIFISC_Catalogo_Oficial_de_Objetos_Tributarios_V1.0.md` e não devem ser
+reutilizados. Código novo deve referenciar exclusivamente `COT-REL-101..120`.
 
 ## 6. Diagrama conceitual V1.1
 
