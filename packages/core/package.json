@@ -1,0 +1,6 @@
+{
+  "name": "@contifisc/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reservado para o schema físico (Prisma) do MCD. Sem persistência nesta Fase 1."
+}

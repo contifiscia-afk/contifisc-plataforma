@@ -1,0 +1,24 @@
+{
+  "name": "contifisc-plataforma",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "lint": "eslint packages apps tests --ext .ts,.tsx",
+    "typecheck": "tsc -b --pretty",
+    "build": "npm run build --workspace=apps/web",
+    "test": "vitest run",
+    "dev": "npm run dev --workspace=apps/web"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
