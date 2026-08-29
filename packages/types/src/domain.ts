@@ -1,10 +1,10 @@
 /**
- * Interfaces canônicas autorizadas na Fase 1 (MCD-001 V1.1 §17 / CDC-001 V1.1 §17 / DST-001 V1.1 §12).
+ * Interfaces canônicas autorizadas na Fase 1 (MCD-001 V1.2 §22 / CDC-001 V1.2 §12 / DST-001 V1.2 §13).
  * Somente os 3 objetos abaixo. Sem FK/relacionamento embutido — associação é sempre via `Vinculo`
  * (COT-OBJ-004), que ainda depende de campos/enums fora do escopo desta rodada.
  *
- * Nomes de campo são exatamente os do MCD-001 V1.1 (snake_case, sem prefixo de tipo) — não
- * convertidos para camelCase (MCD-001 V1.1 §15: "Types canônicos novos usam os nomes V1.1").
+ * Nomes de campo são exatamente os do MCD-001 V1.2 (snake_case, sem prefixo de tipo) — não
+ * convertidos para camelCase (MCD-001 V1.2 §20: "Types canônicos usam exclusivamente nomes V1.2").
  *
  * Qualquer campo, enum ou objeto adicional exigido por uma implementação futura deve gerar
  * um Change Request, não ser inferido aqui.
