@@ -1,15 +1,21 @@
-# Relatório da primeira proposta de `schema.prisma` canônico (v2, corrigida)
+# Relatório da primeira proposta de `schema.prisma` canônico (v3, errata transversal incorporada)
 
 **Status:** DRAFT para revisão humana. Não autoriza migration (ver `schema.prisma`, cabeçalho).
 **Baseline:** COT-001 V1.1 (corrigido por errata), MCD-001 V1.2, CDC-001 V1.2, DST-001 V1.2,
-ADR-001 V1.0 (aprovado — baseline física para PoC), PoC `ADR-C005 VALIDADO`.
+ADR-001 V1.0 com todas as erratas vigentes — incluindo a **Errata controlada nº2** (campos
+transversais MCD-F9001..F9010, 2026-08-31) — e PoC `ADR-C005 VALIDADO`.
 
-**v2 corrige os 3 achados RELEVANTE da v1** (ver §3): (1) removidos os 9 `enum` nativos do
+**v2 corrigiu os 3 achados RELEVANTE da v1** (ver §3): (1) removidos os 9 `enum` nativos do
 Prisma — vocabulário fechado do DST agora é `String`/`@db.Text` com CHECK PostgreSQL futuro
 documentado, conforme ADR-D010; (2) `ResultadoCalculo.cenario_tributario` volta a
 `onDelete: Restrict`; (3) a exceção polimórfica de `RevisaoTecnica.objeto_revisado_id` foi
 formalizada (não generalizada) como categoria distinta ("revisão/auditoria") da de
 `ConflitoDadoItem` ("reconciliação").
+
+**v3 incorpora exclusivamente as decisões físicas autorizadas pela Errata controlada nº2 do
+ADR-001** (`ADR-D015..D019`, `ADR-GAP-007`, `ADR-GAP-008`) — ver §1-A e §4 (reconciliação
+139/139 reclassificada). Nenhuma migration foi criada ou executada; nenhum model foi
+adicionado/removido; nenhum enum nativo foi introduzido; MCD/CDC/DST/COT não foram alterados.
 
 ## 1. Matriz de Rastreabilidade MCD → Prisma
 
@@ -253,13 +259,40 @@ Status: `MAPPED` (representável integralmente em Prisma) · `MAPPED_WITH_SQL_CO
 | MCD-F8705 | RevisaoTecnica | justificativa | RevisaoTecnica | justificativa | String? | text | Sim | — | — | MAPPED |
 | MCD-F8706 | RevisaoTecnica | revisado_em | RevisaoTecnica | revisado_em | DateTime | timestamptz | Não | — | — | MAPPED |
 
-### Campos MCD V1.2 não incluídos nesta proposta (fora dos 20 objetos autorizados ou metadados transversais)
+### Campos MCD V1.2 não incluídos nesta proposta
 
 | MCD | Campo | Motivo |
 |---|---|---|
-| MCD-F9001..F9009 | sistema_origem (genérico), identificador_origem, importado_em, status_processamento_dado, versao_schema, correlation_id, registrado_em (genérico), data_fato, arquivo_origem_id (transversal) | Metadados transversais — MCD-001 V1.2 §10 diz explicitamente que a estratégia física (replicar por tabela, envelope ou tabela de lineage) ainda não foi decidida. Não incluídos para não inventar essa decisão. |
-| MCD-F9010 | status_qualidade_dado (genérico) | Mesmo motivo acima. |
 | COT-OBJ-017/018 | ContaAcesso, CredencialAcesso | Explicitamente fora do escopo desta etapa (aguardam SEC-001). |
+
+Os 10 campos transversais MCD-F9001..F9010 **deixaram de estar fora de escopo físico** nesta v3
+— a Errata controlada nº2 do ADR-001 decidiu e autorizou sua materialização (parcial, por campo
+e por objeto). Ver §1-A para a matriz completa por model/coluna e §4 para a reconciliação
+139/139 reclassificada.
+
+## 1-A. Matriz de materialização dos campos transversais (Errata controlada nº2 do ADR-001)
+
+Cada linha é uma coluna física real adicionada ao `schema.prisma` nesta atualização (v3). Nenhum
+model foi criado; nenhuma FK genérica/polimórfica de proveniência foi criada.
+
+| MCD | Campo | Objetos autorizados (ADR-D0XX) | Tipo Prisma | Constraint futura | Status |
+|---|---|---|---|---|---|
+| MCD-F9001 | sistema_origem | Receita, ContribuicaoPrevidenciaria, EventoIRPF, DocumentoFiscal (ADR-D015) | `String @db.Text` (obrigatório) | DST-E010 — CHECK PostgreSQL futuro (não ENUM) | MAPPED_WITH_SQL_CONSTRAINT |
+| MCD-F9002 | identificador_origem | idem (ADR-D015) | `String? @db.VarChar(120)` | — | MAPPED |
+| MCD-F9003 | importado_em | idem (ADR-D015) | `DateTime? @db.Timestamptz` | — | MAPPED |
+| MCD-F9004 | status_processamento_dado | idem (ADR-D016) | `String? @db.Text` | DST-E009 — CHECK futuro; Salvaguarda 1 (eixo independente de F9010) | MAPPED_WITH_SQL_CONSTRAINT |
+| MCD-F9005 | versao_schema | Nenhum — `DECISÃO_BLOQUEADA` | — | — | DEFERRED_BY_ARCHITECTURE |
+| MCD-F9006 | correlation_id | Nenhum — `DECISÃO_BLOQUEADA` | — | — | DEFERRED_BY_ARCHITECTURE |
+| MCD-F9007 | registrado_em | 16 objetos (ADR-D017): PessoaFisica, PessoaJuridica, Vinculo, VinculoExtremidade, Receita, DocumentoFiscal, ReceitaDocumentoFiscal, ArquivoOrigem, DocumentoFiscalArquivoOrigem, ContribuicaoPrevidenciaria, VinculoPrevidenciario, EventoIRPF, FontePagadora, CenarioTributario, ConflitoDado, ConflitoDadoItem. **NÃO** materializado em ResultadoCalculo/RevisaoTecnica (`ADR-GAP-008`) nem duplicado em UnidadeEconomica/ClassificacaoEquiparacaoHospitalar (já equivalentes) | `DateTime @db.Timestamptz` (obrigatório) | — | DEFERRED_BY_ADR_GAP_008 (14/16 objetos mapeados; 2 pendentes, não resolvidos por inferência) |
+| MCD-F9008 | data_fato | Receita, ContribuicaoPrevidenciaria, EventoIRPF (ADR-D018) — os 3 fatos puros; NÃO em DocumentoFiscal | `DateTime? @db.Timestamptz` | — | MAPPED |
+| MCD-F9009 | arquivo_origem_id | DocumentoFiscal: já coberto por `DocumentoFiscalArquivoOrigem` (nenhuma coluna nova). Receita/ContribuicaoPrevidenciaria/EventoIRPF: sem FK (`ADR-GAP-007`) | — (sem coluna nova) | — | DEFERRED_BY_ADR_GAP_007 |
+| MCD-F9010 | status_qualidade_dado | Receita, ContribuicaoPrevidenciaria, EventoIRPF, DocumentoFiscal (ADR-D016) | `String? @db.Text` | DST-E011 — CHECK futuro; Salvaguarda 1 (eixo independente de F9004) | MAPPED_WITH_SQL_CONSTRAINT |
+
+**Total de colunas físicas novas adicionadas ao `schema.prisma`:** 39 (4×F9001 + 4×F9002 +
+4×F9003 + 4×F9004 + 16×F9007 + 3×F9008 + 4×F9010; F9005/F9006/F9009 não adicionaram coluna).
+Verificado por contagem programática (script percorrendo os 20 models): total de campos
+escalares subiu de 129 (v2) para **168** (v3); campos de relação permanecem em **40**
+(inalterados — nenhuma relação nova foi criada por esta errata).
 
 ## 2. Matriz de Constraints ADR → Prisma/SQL futuro
 
@@ -299,10 +332,18 @@ contagem de `enum` Prisma é **zero**, sem exceção criada por inferência.
 | 9 | `GAP-CDC-1.2-004`/`GAP-MCD-CR2-005` (`FontePagadora.identificador_fiscal`) mantido como `String?` simples, sem union CPF/CNPJ/Exterior inventada. | **HISTÓRICO** (confirmação) |
 | 10 | Nenhuma trigger, function, CHECK SQL, partial index, RLS ou migration foi criada — só comentários normativos apontando o que a migration futura precisará conter. | **HISTÓRICO** (confirmação) |
 | 11 | A distinção explícita entre a exceção polimórfica de `ConflitoDadoItem` (reconciliação) e a de `RevisaoTecnica` (revisão/auditoria) está documentada em ambos os models e na Matriz §1, sem generalizar o padrão para nenhum objeto financeiro/tributário. | **HISTÓRICO** (confirmação da correção #3) |
+| 12 | **[v3]** Os campos transversais MCD-F9001..F9010 foram materializados exclusivamente conforme a matriz aprovada da Errata controlada nº2 (ADR-D015..D019, §1-A) — nenhum campo além dos autorizados foi adicionado a nenhum model, nenhum model novo foi criado, nenhuma entidade/FK genérica de proveniência foi introduzida. | **HISTÓRICO** (confirmação) |
+| 13 | **[v3]** `status_processamento_dado`/`status_qualidade_dado` foram adicionados sempre juntos, nos mesmos 4 objetos, sem nenhuma constraint/trigger/default que os sincronize, derive um do outro ou trate `VALIDADO` como `VALIDO`/`RECONCILIADO` como ausência de `DIVERGENTE` — Salvaguarda 1 preservada. | **HISTÓRICO** (confirmação) |
+| 14 | **[v3]** `registrado_em` (F9007) NÃO foi adicionado a `ResultadoCalculo` nem `RevisaoTecnica` — `calculado_em`/`revisado_em` permanecem como já estavam, sem renomeação e sem inferência de equivalência. `ADR-GAP-008` permanece aberto. | **RELEVANTE** (gap explicitamente registrado, não resolvido — ver `ADR-GAP-008`) |
+| 15 | **[v3]** `arquivo_origem_id` (F9009) NÃO foi criado como FK universal; `DocumentoFiscal` continua usando exclusivamente `DocumentoFiscalArquivoOrigem` (N:N já existente); `MCD-F4008` (campo singular removido pelo CR-002) não foi reintroduzido. `Receita`/`ContribuicaoPrevidenciaria`/`EventoIRPF` permanecem sem essa FK — `ADR-GAP-007` permanece aberto. | **RELEVANTE** (gap explicitamente registrado, não resolvido — ver `ADR-GAP-007`) |
+| 16 | **[v3]** F9005 (`versao_schema`)/F9006 (`correlation_id`) permanecem fisicamente ausentes — nenhuma coluna, tipo, tabela, relação ou JSON genérico foi criado para eles. `EVT-001`/`INT-001` não foram iniciados. | **HISTÓRICO** (confirmação) |
+| 17 | **[v3]** Os 20 models autorizados continuam sendo os únicos models de domínio; `ContaAcesso`/`CredencialAcesso` permanecem fora do escopo (aguardam SEC-001). Nenhum `enum` nativo foi introduzido (contagem permanece 0). | **HISTÓRICO** (confirmação) |
 
-**Nenhuma inconsistência CRÍTICA ou RELEVANTE remanescente.** Os 3 achados RELEVANTE da v1 foram
-corrigidos nesta v2; os achados remanescentes são todos HISTÓRICO/EDITORIAL (confirmações, não
-pendências).
+**Nenhuma inconsistência CRÍTICA remanescente.** Os 3 achados RELEVANTE da v1 foram corrigidos na
+v2. Os dois achados RELEVANTE desta v3 (#14, #15) são exatamente os gaps que a própria Errata
+controlada nº2 do ADR-001 já havia registrado explicitamente (`ADR-GAP-008` e `ADR-GAP-007`) —
+não são inconsistências novas, são a implementação fiel de gaps deliberadamente não resolvidos
+por inferência; os demais achados são HISTÓRICO (confirmações, não pendências).
 
 ## 4. Reconciliação quantitativa integral MCD-001 V1.2 × `schema.prisma` (139/139)
 
@@ -513,64 +554,99 @@ Tabela com **exatamente uma linha por campo canônico dos 139** do catálogo MCD
 | MCD-F8705 | RevisaoTecnica | justificativa | MAPPED | RevisaoTecnica | justificativa | — |
 | MCD-F8706 | RevisaoTecnica | revisado_em | MAPPED | RevisaoTecnica | revisado_em | — |
 
-### DOM-SYS — Metadados transversais (10 campos)
+### DOM-SYS — Metadados transversais (10 campos) — reclassificado nesta v3 (Errata controlada nº2)
 
-| ID MCD | Objeto | Nome do campo | Status | Model Prisma | Field Prisma | Justificativa |
+| ID MCD | Objeto | Nome do campo | Status | Model(s) Prisma | Field Prisma | Justificativa |
 |---|---|---|---|---|---|---|
-| MCD-F9001 | Metadados Transversais | sistema_origem | OUT_OF_SCOPE | — | — | MCD-001 V1.2 §10: estratégia física (envelope/composição/tabela de lineage) ainda não decidida; não replicado por tabela nesta proposta |
-| MCD-F9002 | Metadados Transversais | identificador_origem | OUT_OF_SCOPE | — | — | Idem MCD-F9001 |
-| MCD-F9003 | Metadados Transversais | importado_em | OUT_OF_SCOPE | — | — | Idem MCD-F9001 |
-| MCD-F9004 | Metadados Transversais | status_processamento_dado | OUT_OF_SCOPE | — | — | Idem MCD-F9001 |
-| MCD-F9005 | Metadados Transversais | versao_schema | OUT_OF_SCOPE | — | — | Idem MCD-F9001 |
-| MCD-F9006 | Metadados Transversais | correlation_id | OUT_OF_SCOPE | — | — | Idem MCD-F9001 |
-| MCD-F9007 | Metadados Transversais | registrado_em | OUT_OF_SCOPE | — | — | Idem MCD-F9001 |
-| MCD-F9008 | Metadados Transversais | data_fato | OUT_OF_SCOPE | — | — | Idem MCD-F9001 |
-| MCD-F9009 | Metadados Transversais | arquivo_origem_id | OUT_OF_SCOPE | — | — | Idem MCD-F9001 (restaurado por errata de publicação do MCD V1.2 §2.1; continua fora de escopo físico) |
-| MCD-F9010 | Metadados Transversais | status_qualidade_dado | OUT_OF_SCOPE | — | — | Idem MCD-F9001 |
+| MCD-F9001 | Metadados Transversais | sistema_origem | MAPPED_WITH_SQL_CONSTRAINT | Receita, ContribuicaoPrevidenciaria, EventoIRPF, DocumentoFiscal | sistema_origem | ADR-D015. DST-E010 — CHECK PostgreSQL futuro, nunca ENUM nativo (ADR-D010) |
+| MCD-F9002 | Metadados Transversais | identificador_origem | MAPPED | idem | identificador_origem | ADR-D015. Sem CHECK necessário (varchar livre) |
+| MCD-F9003 | Metadados Transversais | importado_em | MAPPED | idem | importado_em | ADR-D015 |
+| MCD-F9004 | Metadados Transversais | status_processamento_dado | MAPPED_WITH_SQL_CONSTRAINT | idem | status_processamento_dado | ADR-D016. DST-E009 — CHECK futuro. Salvaguarda 1: eixo estritamente independente de F9010 |
+| MCD-F9005 | Metadados Transversais | versao_schema | DEFERRED_BY_ARCHITECTURE | — | — | `DECISÃO_BLOQUEADA` — BLOQUEADO POR EVT-001/INT-001. Nenhuma coluna/tipo/tabela criada |
+| MCD-F9006 | Metadados Transversais | correlation_id | DEFERRED_BY_ARCHITECTURE | — | — | Idem MCD-F9005 |
+| MCD-F9007 | Metadados Transversais | registrado_em | DEFERRED_BY_ADR_GAP_008 | 14/16 objetos autorizados (ADR-D017) — ver §1-A para lista completa | registrado_em | Materializado em 14 dos 16 objetos autorizados. NÃO materializado em `ResultadoCalculo`/`RevisaoTecnica` — equivalência com `calculado_em`/`revisado_em` não confirmada; `ADR-GAP-008` aberto, não resolvido por inferência |
+| MCD-F9008 | Metadados Transversais | data_fato | MAPPED | Receita, ContribuicaoPrevidenciaria, EventoIRPF | data_fato | ADR-D018. Três fatos puros; TIMESTAMPTZ (decisão explícita desta atualização) |
+| MCD-F9009 | Metadados Transversais | arquivo_origem_id | DEFERRED_BY_ADR_GAP_007 | DocumentoFiscal (via relacionamento existente, sem coluna nova) | — | ADR-D019. `DocumentoFiscal` já coberto por `DocumentoFiscalArquivoOrigem`; `Receita`/`ContribuicaoPrevidenciaria`/`EventoIRPF` sem FK — `ADR-GAP-007` aberto, não resolvido por inferência. `MCD-F4008` (campo singular removido pelo CR-002) não foi reintroduzido |
+| MCD-F9010 | Metadados Transversais | status_qualidade_dado | MAPPED_WITH_SQL_CONSTRAINT | Receita, ContribuicaoPrevidenciaria, EventoIRPF, DocumentoFiscal | status_qualidade_dado | ADR-D016. DST-E011 — CHECK futuro. Salvaguarda 1: eixo estritamente independente de F9004 |
 
-### Equação de fechamento
+### Equação de fechamento (v3)
 
 ```
-95 (MAPPED) + 18 (MAPPED_WITH_SQL_CONSTRAINT) + 16 (DEFERRED_BY_GAP) + 0 (NOT_AUTHORIZED) + 10 (OUT_OF_SCOPE) = 139
+98 (MAPPED) + 21 (MAPPED_WITH_SQL_CONSTRAINT) + 16 (DEFERRED_BY_GAP)
+  + 1 (DEFERRED_BY_ADR_GAP_007) + 1 (DEFERRED_BY_ADR_GAP_008) + 2 (DEFERRED_BY_ARCHITECTURE)
+  + 0 (NOT_AUTHORIZED) + 0 (OUT_OF_SCOPE) = 139
 ```
 
-**139 = MAPPED + MAPPED_WITH_SQL_CONSTRAINT + DEFERRED_BY_GAP + NOT_AUTHORIZED + OUT_OF_SCOPE** ✓
+**139 = MAPPED + MAPPED_WITH_SQL_CONSTRAINT + DEFERRED_BY_GAP + DEFERRED_BY_ADR_GAP_007 +
+DEFERRED_BY_ADR_GAP_008 + DEFERRED_BY_ARCHITECTURE + NOT_AUTHORIZED + OUT_OF_SCOPE** ✓
 
-Verificação independente: os 129 campos com coluna física real (95 + 18 + 16) batem exatamente
-com a contagem estrutural de campos escalares do `schema.prisma` (129, obtida por script
-percorrendo os 20 models e distinguindo campos escalares de campos de relação/navegação
-virtuais). 129 + 10 (fora de escopo) = 139.
+Derivação a partir da v2 (que fechava em 95+18+16+0+10=139, com os 10 campos transversais
+`OUT_OF_SCOPE`): dos 10 campos transversais, 3 passam a `MAPPED` (F9002, F9003, F9008: 95+3=98),
+3 passam a `MAPPED_WITH_SQL_CONSTRAINT` (F9001, F9004, F9010: 18+3=21), 2 passam a
+`DEFERRED_BY_ARCHITECTURE` (F9005, F9006 — categoria nova), 1 passa a `DEFERRED_BY_ADR_GAP_007`
+(F9009 — categoria nova) e 1 passa a `DEFERRED_BY_ADR_GAP_008` (F9007 — categoria nova).
+`DEFERRED_BY_GAP` (16) e `NOT_AUTHORIZED` (0) permanecem inalterados. `OUT_OF_SCOPE` cai a 0 —
+não resta nenhum caso legítimo, pois todos os 10 campos transversais já têm decisão física
+registrada (materializada ou explicitamente deferida por gap/arquitetura nomeado).
+
+Verificação independente: os campos com coluna física real na v3 somam **135**
+(98 MAPPED + 21 MAPPED_WITH_SQL_CONSTRAINT + 16 DEFERRED_BY_GAP). Isso **não** bate diretamente
+com a contagem estrutural de 168 campos escalares do `schema.prisma`, e a diferença é esperada e
+explicada: ao contrário dos 129 campos não-transversais (mapeamento 1:1 campo↔coluna, herdado
+sem alteração da v2), os campos transversais materializados nesta v3 são replicados como coluna
+física em **múltiplos** models por decisão do ADR-001 (cada objeto autorizado recebe sua própria
+coluna) — um único ID MCD transversal corresponde a várias colunas físicas. A reconciliação
+exigida (uma linha por ID MCD, 139 linhas) permanece correta; a matriz §1-A decompõe cada ID
+transversal em suas colunas físicas reais para auditoria completa:
+
+```
+129 campos não-transversais (1 coluna cada, herdados da v2, inalterados)
+ + 39 colunas físicas novas dos campos transversais (F9001×4 + F9002×4 + F9003×4 + F9004×4
+   + F9007×16 + F9008×3 + F9010×4; F9005/F9006/F9009 = 0 colunas novas)
+ = 168 campos escalares totais em schema.prisma (confirmado por script — ver §1-A)
+```
 
 ### Verificações adicionais exigidas
 
-- **Nenhum ID MCD duplicado:** confirmado — cada uma das 139 linhas acima usa um ID MCD único;
-  nenhum ID aparece em mais de uma linha.
+- **Nenhum ID MCD duplicado:** confirmado — cada uma das 139 linhas usa um ID MCD único; nenhum
+  ID aparece em mais de uma linha (os 10 transversais aparecem uma vez cada, mesmo quando
+  materializados em múltiplos models — a materialização por model está detalhada em §1-A, não
+  duplicada aqui).
 - **Nenhum ID MCD ausente:** confirmado — a enumeração cobre integralmente F0001-F0005,
   F1001-F1008, F2001-F2007, F2501-F2505+F2510, F2520-F2525, F3001-F3005+F3007+F3008+F3010+F3011,
   F4001-F4007, F4301-F4303, F4401-F4404, F5001-F5011, F6001-F6007, F6101-F6105, F7001-F7010,
   F7201-F7204, F8001-F8005, F8201-F8209, F8401-F8405, F8601-F8604, F8650-F8657, F8701-F8706,
   F9001-F9010 — sem lacunas.
 - **Nenhum field Prisma canônico sem correspondência no MCD, exceto campos técnicos autorizados
-  pelo ADR:** confirmado. Os 129 campos escalares do `schema.prisma` correspondem 1:1 aos 129
-  campos MAPPED/MAPPED_WITH_SQL_CONSTRAINT/DEFERRED_BY_GAP desta tabela. Os 40 campos de
-  relação/navegação Prisma (`@relation(...)` e listas de back-relation, ex.: `vinculo
-  Vinculo @relation(...)`, `receitas Receita[]`) são propriedades virtuais do ORM sem coluna
-  física própria — não são "campos MCD" e portanto não entram nesta reconciliação de dados; a FK
-  escalar correspondente a cada uma (`vinculo_id`, etc.) já está contabilizada com seu próprio ID
-  MCD na tabela acima. Nenhum campo técnico adicional (ex.: `sistema_origem` genérico,
-  `password_hash`, `tenant_id`) foi encontrado no schema — consistente com o que o ADR-001
-  autorizou.
+  pelo ADR:** confirmado por script (20 models, 168 campos escalares, 40 campos de relação —
+  ver §1-A). Os campos de relação/navegação Prisma (`@relation(...)` e back-relations, ex.:
+  `vinculo Vinculo @relation(...)`, `receitas Receita[]`) são propriedades virtuais do ORM sem
+  coluna física própria — não são "campos MCD" e não entram nesta reconciliação; a FK escalar
+  correspondente a cada uma já está contabilizada com seu próprio ID MCD. Nenhum campo técnico
+  não autorizado (ex.: `password_hash`, `tenant_id`, tabela genérica de proveniência, referência
+  polimórfica de proveniência) foi encontrado no schema.
 - **Campos removidos/superseded não reincorporados:** confirmado. `MCD-F3006` (tipo_titular),
   `MCD-F3009` (titular_id) e `MCD-F4008` (arquivo_origem_id único) são IDs **aposentados da
-  MCD-001 V1.1**, formalmente removidos pelo CR-002 e **não fazem parte do catálogo de 139
-  campos da V1.2** — por isso não aparecem como linha nesta reconciliação (que cobre
-  exclusivamente os 139 campos vigentes da V1.2). Confirmei por inspeção direta que nenhum dos
-  três nomes existe em `schema.prisma` (`Receita` não tem `tipo_titular`/`titular_id`;
-  `DocumentoFiscal` não tem `arquivo_origem_id`).
+  MCD-001 V1.1**, removidos pelo CR-002, e **não fazem parte do catálogo de 139 campos da V1.2**
+  — confirmado por inspeção direta que nenhum dos três nomes existe em `schema.prisma`
+  (`Receita` não tem `tipo_titular`/`titular_id`; `DocumentoFiscal` não tem `arquivo_origem_id`
+  como coluna singular).
+- **F9005/F9006 permanecem fisicamente ausentes:** confirmado por inspeção do `schema.prisma` —
+  nenhum campo `versao_schema`/`correlation_id`, nenhuma tabela, relação ou tipo JSON genérico
+  foi criado. `EVT-001`/`INT-001` não foram iniciados por esta atualização.
+- **F9007 não foi inferido em ResultadoCalculo/RevisaoTecnica:** confirmado — ambos os models
+  mantêm exclusivamente `calculado_em`/`revisado_em`, sem renomeação e sem campo `registrado_em`
+  adicional. `ADR-GAP-008` permanece registrado e aberto.
+- **F9009 não foi transformado em FK universal:** confirmado — nenhuma coluna `arquivo_origem_id`
+  foi adicionada a `Receita`/`ContribuicaoPrevidenciaria`/`EventoIRPF`; `DocumentoFiscal`
+  continua exclusivamente via `DocumentoFiscalArquivoOrigem`. `ADR-GAP-007` permanece registrado
+  e aberto.
 - **Os 20 models autorizados continuam sendo os únicos models de domínio implementados:**
   confirmado — `grep -c "^model " schema.prisma` retorna exatamente 20, o mesmo conjunto desde a
-  v2 (nenhuma alteração feita ao `schema.prisma` nesta rodada).
+  v2. `ContaAcesso`/`CredencialAcesso` continuam fora.
+- **Nenhum enum nativo do Prisma/PostgreSQL foi introduzido:** confirmado — contagem de `enum`
+  permanece 0.
 
 ### Conclusão
 
-**RECONCILIAÇÃO MCD → PRISMA FECHADA EM 139/139**
+**RECONCILIAÇÃO MCD → PRISMA FECHADA EM 139/139 (v3, Errata controlada nº2 reclassificada)**

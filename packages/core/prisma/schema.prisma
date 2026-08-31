@@ -1,5 +1,6 @@
 // ============================================================================
-// schema.prisma — PRIMEIRA PROPOSTA (DRAFT, NÃO APROVADO) — v2, corrigida
+// schema.prisma — PRIMEIRA PROPOSTA (DRAFT, NÃO APROVADO) — v3, errata
+// transversal incorporada
 // ============================================================================
 // Baseline obrigatória: COT-001 V1.1 (corrigido por errata) / MCD-001 V1.2 /
 // CDC-001 V1.2 / DST-001 V1.2 / ADR-001 V1.0 (APROVADO — baseline física
@@ -60,12 +61,46 @@
 //   física do vocabulário fechado, distinguidos apenas pelo comentário.
 // - `relationMode = "foreignKeys"` conforme ADR-D013 (obrigatório) — a
 //   integridade referencial fica no PostgreSQL, nunca emulada no client.
-// - Metadados transversais (MCD-F9001..F9010: sistema_origem genérico,
-//   status_processamento_dado, status_qualidade_dado, correlation_id etc.)
-//   NÃO foram replicados como colunas em cada tabela nesta proposta — o
-//   próprio MCD-001 V1.2 §10 diz que a estratégia física (envelope,
-//   composição ou tabela de lineage) ainda não foi decidida. Adicioná-los
-//   agora seria inventar uma decisão física não autorizada.
+//
+// Atualização desta v3 — Errata controlada nº2 do ADR-001 (campos
+// transversais MCD-F9001..F9010, incorporada em 2026-08-31,
+// docs/ADR-001_..._V1.0.md §2 ADR-D015..D019 / §14 ADR-GAP-007/008):
+// - F9001/F9002/F9003 (`sistema_origem`/`identificador_origem`/`importado_em`,
+//   ADR-D015): coluna física em `receita`, `contribuicao_previdenciaria`,
+//   `evento_irpf`, `documento_fiscal`. `sistema_origem` é `String`/`@db.Text`
+//   (DST-E010, CHECK futuro, nunca ENUM nativo, nunca valor de
+//   infraestrutura). Nenhuma entidade genérica de proveniência, nenhuma
+//   referência polimórfica reversa.
+// - F9004/F9010 (`status_processamento_dado`/`status_qualidade_dado`,
+//   ADR-D016): coluna física nos mesmos quatro objetos, sempre os dois
+//   juntos. EIXOS ESTRITAMENTE INDEPENDENTES (Salvaguarda 1) — proibido
+//   qualquer constraint/trigger/default/lógica que sincronize os dois
+//   valores, derive um do outro, ou trate `VALIDADO` (processamento) como
+//   equivalente a `VALIDO` (qualidade), ou `RECONCILIADO` como eliminação
+//   automática de `DIVERGENTE`.
+// - F9005/F9006 (`versao_schema`/`correlation_id`): **NÃO implementados**.
+//   Permanecem `DECISÃO_BLOQUEADA — BLOQUEADO POR EVT-001/INT-001`. Nenhuma
+//   coluna, tipo, tabela, relação ou JSON genérico foi criado para eles
+//   nesta proposta.
+// - F9007 (`registrado_em`, ADR-D017): coluna física em 16 objetos —
+//   `pessoa_fisica`, `pessoa_juridica`, `vinculo`, `vinculo_extremidade`,
+//   `receita`, `documento_fiscal`, `receita_documento_fiscal`,
+//   `arquivo_origem`, `documento_fiscal_arquivo_origem`,
+//   `contribuicao_previdenciaria`, `vinculo_previdenciario`, `evento_irpf`,
+//   `fonte_pagadora`, `cenario_tributario`, `conflito_dado`,
+//   `conflito_dado_item`. NÃO duplicado em `unidade_economica` (já tem
+//   `criado_em`) nem `classificacao_equiparacao_hospitalar` (já tem
+//   `registrado_em`, MCD-F5010). NÃO materializado em `resultado_calculo`
+//   nem `revisao_tecnica` — `ADR-GAP-008` permanece aberto (equivalência com
+//   `calculado_em`/`revisado_em` não confirmada); não resolvido por inferência.
+// - F9008 (`data_fato`, ADR-D018): coluna física apenas nos três fatos puros
+//   — `receita`, `contribuicao_previdenciaria`, `evento_irpf`. `TIMESTAMPTZ`
+//   (decisão explícita desta atualização; ADR-D018 deixava o tipo em aberto).
+// - F9009 (`arquivo_origem_id`, ADR-D019): **nenhuma FK universal**. Em
+//   `documento_fiscal`, já coberto pelo relacionamento existente
+//   `documento_fiscal_arquivo_origem` — nenhuma coluna nova. Em `receita`,
+//   `contribuicao_previdenciaria`, `evento_irpf`: sem FK, `ADR-GAP-007`
+//   permanece aberto; não resolvido por inferência.
 // ============================================================================
 
 generator client {
@@ -112,6 +147,9 @@ model PessoaFisica {
   uf_registro_profissional String?   @db.VarChar(2)
   /// DST-GAP-002 — Enum/Ref aberto; catálogo de especialidades ainda não aprovado. Não inventar lista fechada.
   especialidade_saude      String?   @db.Text
+  /// MCD-F9007 (Errata controlada nº2 do ADR-001, ADR-D017) — momento do
+  /// registro canônico no armazenamento CONTIFISC.
+  registrado_em            DateTime  @db.Timestamptz
 
   vinculo_extremidades          VinculoExtremidade[]
   receitas                      Receita[]
@@ -137,6 +175,9 @@ model PessoaJuridica {
   cnae_principal    String?   @db.VarChar(7)
   data_abertura     DateTime? @db.Date
   municipio_ibge    String?   @db.VarChar(7)
+  /// MCD-F9007 (Errata controlada nº2 do ADR-001, ADR-D017) — momento do
+  /// registro canônico no armazenamento CONTIFISC.
+  registrado_em     DateTime  @db.Timestamptz
 
   vinculo_extremidades VinculoExtremidade[]
   receitas             Receita[]
@@ -159,6 +200,9 @@ model Vinculo {
   vigencia_fim                       DateTime? @db.Date
   /// DST-GAP-005 — Enum/Ref aberto (catálogo de papel_vinculo ainda não fechado).
   papel_vinculo                      String?   @db.Text
+  /// MCD-F9007 (Errata controlada nº2 do ADR-001, ADR-D017) — momento do
+  /// registro canônico no armazenamento CONTIFISC.
+  registrado_em                      DateTime  @db.Timestamptz
 
   /// ADR-C005 / COT-REL-NORM-001 (COT-001 V1.1 §5): todo Vinculo deve ter
   /// EXATAMENTE duas VinculoExtremidade (1 ORIGEM + 1 DESTINO). Prisma NÃO
@@ -178,14 +222,17 @@ model Vinculo {
 // Materializa ORIGEM/DESTINO de Vinculo com FK real para UE, PF ou PJ.
 // ============================================================================
 model VinculoExtremidade {
-  id                   String  @id @db.Uuid
-  vinculo_id           String  @db.Uuid
+  id                   String   @id @db.Uuid
+  vinculo_id           String   @db.Uuid
   /// ADR-C004 — DST-E012 (fechado): ORIGEM | DESTINO. CHECK PostgreSQL
   /// obrigatório na migration futura (ADR-D010: TEXT + CHECK, não ENUM nativo).
-  lado_extremidade     String  @db.Text
-  unidade_economica_id String? @db.Uuid
-  pessoa_fisica_id     String? @db.Uuid
-  pessoa_juridica_id   String? @db.Uuid
+  lado_extremidade     String   @db.Text
+  unidade_economica_id String?  @db.Uuid
+  pessoa_fisica_id     String?  @db.Uuid
+  pessoa_juridica_id   String?  @db.Uuid
+  /// MCD-F9007 (Errata controlada nº2 do ADR-001, ADR-D017) — momento do
+  /// registro canônico no armazenamento CONTIFISC.
+  registrado_em        DateTime @db.Timestamptz
 
   vinculo           Vinculo           @relation(fields: [vinculo_id], references: [id], onDelete: Restrict)
   unidade_economica UnidadeEconomica? @relation(fields: [unidade_economica_id], references: [id], onDelete: Restrict)
@@ -208,6 +255,11 @@ model VinculoExtremidade {
 // Receita: fato canônico. MCD-F3006 (tipo_titular) e MCD-F3009 (titular_id,
 // polimórfico) foram REMOVIDOS pelo CR-002/MCD-001 V1.2 — titularidade agora
 // é FK real com XOR.
+//
+// Campos transversais (Errata controlada nº2 do ADR-001 — ver cabeçalho do
+// arquivo): F9001/F9002/F9003/F9004/F9010/F9007/F9008 materializados abaixo.
+// F9009 (`arquivo_origem_id`) NÃO foi criado aqui — `ADR-GAP-007` permanece
+// aberto; nenhuma FK criada por inferência.
 // ============================================================================
 model Receita {
   id                  String    @id @db.Uuid
@@ -228,6 +280,39 @@ model Receita {
   pessoa_fisica_id    String?   @db.Uuid
   pessoa_juridica_id  String?   @db.Uuid
 
+  /// MCD-F9001 (Errata controlada nº2, ADR-D015) — DST-E010 (fechado):
+  /// ERP_CONTABIL | DOCUMENTO_FISCAL | CNIS | FOLHA_PAGAMENTO | BANCO |
+  /// INFORME_RENDIMENTOS | CARNE_LEAO | ENTRADA_MANUAL | API_GOVERNAMENTAL |
+  /// OUTRO_SISTEMA. CHECK PostgreSQL obrigatório na migration futura
+  /// (ADR-D010: TEXT + CHECK, não ENUM nativo). Nunca infraestrutura
+  /// (NEON_DB/POSTGRESQL/PRISMA/VERCEL) como valor.
+  sistema_origem            String    @db.Text
+  /// MCD-F9002 (Errata controlada nº2, ADR-D015) — identificador do registro
+  /// no sistema-fonte externo, nunca o `id` interno da CONTIFISC.
+  identificador_origem      String?   @db.VarChar(120)
+  /// MCD-F9003 (Errata controlada nº2, ADR-D015).
+  importado_em              DateTime? @db.Timestamptz
+  /// MCD-F9004 (Errata controlada nº2, ADR-D016) — DST-E009 (fechado):
+  /// IMPORTADO | VALIDADO | RECONCILIADO | OVERRIDDEN | SUPERSEDED |
+  /// CANCELADO. CHECK PostgreSQL obrigatório na migration futura. EIXO
+  /// ESTRITAMENTE INDEPENDENTE de status_qualidade_dado — proibido
+  /// sincronizar, derivar um do outro, ou tratar VALIDADO como equivalente a
+  /// VALIDO / RECONCILIADO como eliminação de DIVERGENTE (Salvaguarda 1).
+  status_processamento_dado String?   @db.Text
+  /// MCD-F9010 (Errata controlada nº2, ADR-D016) — DST-E011 (fechado):
+  /// NAO_AVALIADO | VALIDO | INCOMPLETO | DIVERGENTE | SUSPEITO. CHECK
+  /// PostgreSQL obrigatório na migration futura. EIXO ESTRITAMENTE
+  /// INDEPENDENTE de status_processamento_dado (Salvaguarda 1) — mesma
+  /// proibição de sincronização/derivação/equivalência acima.
+  status_qualidade_dado     String?   @db.Text
+  /// MCD-F9007 (Errata controlada nº2, ADR-D017) — momento do registro
+  /// canônico no armazenamento CONTIFISC.
+  registrado_em             DateTime  @db.Timestamptz
+  /// MCD-F9008 (Errata controlada nº2, ADR-D018) — data de ocorrência do
+  /// fato; pode divergir de data_emissao/competencia. TIMESTAMPTZ (decisão
+  /// explícita desta atualização).
+  data_fato                 DateTime? @db.Timestamptz
+
   fonte_pagadora  FontePagadora?  @relation(fields: [fonte_pagadora_id], references: [id], onDelete: Restrict)
   pessoa_fisica   PessoaFisica?   @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
   pessoa_juridica PessoaJuridica? @relation(fields: [pessoa_juridica_id], references: [id], onDelete: Restrict)
@@ -243,6 +328,12 @@ model Receita {
 // COT-OBJ-006 -> MCD-F4001..F4007 -> CDC-FIS-001 -> DST-T007
 // Documento Fiscal: evidência/documento normalizado. MCD-F4008
 // (arquivo_origem_id único) foi REMOVIDO — ver DocumentoFiscalArquivoOrigem (N:N).
+// NÃO reintroduzido por esta atualização (Errata controlada nº2, ADR-D019).
+//
+// Campos transversais (Errata controlada nº2 do ADR-001): F9001/F9002/F9003/
+// F9004/F9010/F9007 materializados abaixo. F9008 não se aplica (não é um dos
+// três fatos puros). F9009 já está coberto pelo relacionamento
+// `arquivos` (DocumentoFiscalArquivoOrigem, COT-SUP-003) — nenhuma coluna nova.
 // ============================================================================
 model DocumentoFiscal {
   id                       String   @id @db.Uuid
@@ -253,6 +344,29 @@ model DocumentoFiscal {
   codigo_servico_fiscal    String?  @db.VarChar(30)
   descricao_servico_fiscal String?  @db.Text
   valor_documento_fiscal   Decimal? @db.Decimal(18, 2)
+
+  /// MCD-F9001 (Errata controlada nº2, ADR-D015) — DST-E010 (fechado):
+  /// ERP_CONTABIL | DOCUMENTO_FISCAL | CNIS | FOLHA_PAGAMENTO | BANCO |
+  /// INFORME_RENDIMENTOS | CARNE_LEAO | ENTRADA_MANUAL | API_GOVERNAMENTAL |
+  /// OUTRO_SISTEMA. CHECK PostgreSQL obrigatório na migration futura
+  /// (ADR-D010: TEXT + CHECK, não ENUM nativo). Nunca infraestrutura como valor.
+  sistema_origem            String    @db.Text
+  /// MCD-F9002 (Errata controlada nº2, ADR-D015) — identificador do registro
+  /// no sistema-fonte externo, nunca o `id` interno da CONTIFISC.
+  identificador_origem      String?   @db.VarChar(120)
+  /// MCD-F9003 (Errata controlada nº2, ADR-D015).
+  importado_em              DateTime? @db.Timestamptz
+  /// MCD-F9004 (Errata controlada nº2, ADR-D016) — DST-E009 (fechado). EIXO
+  /// ESTRITAMENTE INDEPENDENTE de status_qualidade_dado — proibido
+  /// sincronizar, derivar um do outro, ou tratar VALIDADO como equivalente a
+  /// VALIDO / RECONCILIADO como eliminação de DIVERGENTE (Salvaguarda 1).
+  status_processamento_dado String?   @db.Text
+  /// MCD-F9010 (Errata controlada nº2, ADR-D016) — DST-E011 (fechado). EIXO
+  /// ESTRITAMENTE INDEPENDENTE de status_processamento_dado (Salvaguarda 1).
+  status_qualidade_dado     String?   @db.Text
+  /// MCD-F9007 (Errata controlada nº2, ADR-D017) — momento do registro
+  /// canônico no armazenamento CONTIFISC.
+  registrado_em             DateTime  @db.Timestamptz
 
   receitas ReceitaDocumentoFiscal[]
   arquivos DocumentoFiscalArquivoOrigem[]
@@ -266,9 +380,12 @@ model DocumentoFiscal {
 // Estrutura de suporte (N:N explícita) — NÃO é objeto tributário autônomo.
 // ============================================================================
 model ReceitaDocumentoFiscal {
-  id                  String @id @db.Uuid
-  receita_id          String @db.Uuid
-  documento_fiscal_id String @db.Uuid
+  id                  String   @id @db.Uuid
+  receita_id          String   @db.Uuid
+  documento_fiscal_id String   @db.Uuid
+  /// MCD-F9007 (Errata controlada nº2 do ADR-001, ADR-D017) — momento do
+  /// registro canônico no armazenamento CONTIFISC.
+  registrado_em       DateTime @db.Timestamptz
 
   receita          Receita         @relation(fields: [receita_id], references: [id], onDelete: Cascade)
   documento_fiscal DocumentoFiscal @relation(fields: [documento_fiscal_id], references: [id], onDelete: Cascade)
@@ -285,11 +402,14 @@ model ReceitaDocumentoFiscal {
 // Arquivo de Origem: evidência RAW imutável.
 // ============================================================================
 model ArquivoOrigem {
-  id                       String  @id @db.Uuid
-  nome_arquivo             String? @db.VarChar(255)
-  hash_conteudo            String  @db.VarChar(128)
-  tipo_mime                String? @db.VarChar(120)
-  armazenamento_referencia String  @db.VarChar(500)
+  id                       String   @id @db.Uuid
+  nome_arquivo             String?  @db.VarChar(255)
+  hash_conteudo            String   @db.VarChar(128)
+  tipo_mime                String?  @db.VarChar(120)
+  armazenamento_referencia String   @db.VarChar(500)
+  /// MCD-F9007 (Errata controlada nº2 do ADR-001, ADR-D017) — momento do
+  /// registro canônico no armazenamento CONTIFISC.
+  registrado_em            DateTime @db.Timestamptz
 
   documentos_fiscais DocumentoFiscalArquivoOrigem[]
 
@@ -301,11 +421,14 @@ model ArquivoOrigem {
 // Estrutura de suporte (N:N explícita) — NÃO é objeto tributário autônomo.
 // ============================================================================
 model DocumentoFiscalArquivoOrigem {
-  id                  String  @id @db.Uuid
-  documento_fiscal_id String  @db.Uuid
-  arquivo_origem_id   String  @db.Uuid
+  id                  String   @id @db.Uuid
+  documento_fiscal_id String   @db.Uuid
+  arquivo_origem_id   String   @db.Uuid
   /// DST-GAP-011 — Enum/Ref aberto. Não inventar enum fechado enquanto o gap estiver aberto.
-  papel_arquivo       String? @db.Text
+  papel_arquivo       String?  @db.Text
+  /// MCD-F9007 (Errata controlada nº2 do ADR-001, ADR-D017) — momento do
+  /// registro canônico no armazenamento CONTIFISC.
+  registrado_em       DateTime @db.Timestamptz
 
   documento_fiscal DocumentoFiscal @relation(fields: [documento_fiscal_id], references: [id], onDelete: Cascade)
   arquivo_origem   ArquivoOrigem   @relation(fields: [arquivo_origem_id], references: [id], onDelete: Restrict)
@@ -349,6 +472,11 @@ model ClassificacaoEquiparacaoHospitalar {
 // ============================================================================
 // COT-OBJ-009 -> MCD-F6001..F6007 -> CDC-PRE-001 -> DST-T012
 // Contribuição Previdenciária: fato previdenciário por PF/vínculo/competência.
+//
+// Campos transversais (Errata controlada nº2 do ADR-001 — ver cabeçalho do
+// arquivo): F9001/F9002/F9003/F9004/F9010/F9007/F9008 materializados abaixo.
+// F9009 (`arquivo_origem_id`) NÃO foi criado aqui — `ADR-GAP-007` permanece
+// aberto; nenhuma FK criada por inferência.
 // ============================================================================
 model ContribuicaoPrevidenciaria {
   id                         String   @id @db.Uuid
@@ -358,6 +486,30 @@ model ContribuicaoPrevidenciaria {
   valor_excedente_inss       Decimal? @db.Decimal(18, 2)
   vinculo_previdenciario_id  String?  @db.Uuid
   pessoa_fisica_id           String   @db.Uuid
+
+  /// MCD-F9001 (Errata controlada nº2, ADR-D015) — DST-E010 (fechado). CHECK
+  /// PostgreSQL obrigatório na migration futura (ADR-D010: TEXT + CHECK, não
+  /// ENUM nativo). Nunca infraestrutura como valor.
+  sistema_origem            String    @db.Text
+  /// MCD-F9002 (Errata controlada nº2, ADR-D015) — identificador do registro
+  /// no sistema-fonte externo, nunca o `id` interno da CONTIFISC.
+  identificador_origem      String?   @db.VarChar(120)
+  /// MCD-F9003 (Errata controlada nº2, ADR-D015).
+  importado_em              DateTime? @db.Timestamptz
+  /// MCD-F9004 (Errata controlada nº2, ADR-D016) — DST-E009 (fechado). EIXO
+  /// ESTRITAMENTE INDEPENDENTE de status_qualidade_dado — proibido
+  /// sincronizar, derivar um do outro, ou tratar VALIDADO como equivalente a
+  /// VALIDO / RECONCILIADO como eliminação de DIVERGENTE (Salvaguarda 1).
+  status_processamento_dado String?   @db.Text
+  /// MCD-F9010 (Errata controlada nº2, ADR-D016) — DST-E011 (fechado). EIXO
+  /// ESTRITAMENTE INDEPENDENTE de status_processamento_dado (Salvaguarda 1).
+  status_qualidade_dado     String?   @db.Text
+  /// MCD-F9007 (Errata controlada nº2, ADR-D017) — momento do registro
+  /// canônico no armazenamento CONTIFISC.
+  registrado_em             DateTime  @db.Timestamptz
+  /// MCD-F9008 (Errata controlada nº2, ADR-D018) — data de ocorrência do
+  /// fato. TIMESTAMPTZ (decisão explícita desta atualização).
+  data_fato                 DateTime? @db.Timestamptz
 
   vinculo_previdenciario VinculoPrevidenciario? @relation(fields: [vinculo_previdenciario_id], references: [id], onDelete: Restrict)
   pessoa_fisica          PessoaFisica           @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
@@ -376,6 +528,9 @@ model VinculoPrevidenciario {
   tipo_vinculo_previdenciario String    @db.Text
   vigencia_inicio             DateTime? @db.Date
   vigencia_fim                DateTime? @db.Date
+  /// MCD-F9007 (Errata controlada nº2 do ADR-001, ADR-D017) — momento do
+  /// registro canônico no armazenamento CONTIFISC.
+  registrado_em               DateTime  @db.Timestamptz
 
   pessoa_fisica PessoaFisica @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
 
@@ -387,6 +542,11 @@ model VinculoPrevidenciario {
 // ============================================================================
 // COT-OBJ-011 -> MCD-F7001..F7010 -> CDC-IRP-001 -> DST-T014
 // Evento IRPF/Carnê-Leão: fato relevante ao IRPF, independente de existir PJ.
+//
+// Campos transversais (Errata controlada nº2 do ADR-001 — ver cabeçalho do
+// arquivo): F9001/F9002/F9003/F9004/F9010/F9007/F9008 materializados abaixo.
+// F9009 (`arquivo_origem_id`) NÃO foi criado aqui — `ADR-GAP-007` permanece
+// aberto; nenhuma FK criada por inferência.
 // ============================================================================
 model EventoIRPF {
   id                          String   @id @db.Uuid
@@ -403,6 +563,30 @@ model EventoIRPF {
   pessoa_fisica_id            String   @db.Uuid
   fonte_pagadora_id           String?  @db.Uuid
 
+  /// MCD-F9001 (Errata controlada nº2, ADR-D015) — DST-E010 (fechado). CHECK
+  /// PostgreSQL obrigatório na migration futura (ADR-D010: TEXT + CHECK, não
+  /// ENUM nativo). Nunca infraestrutura como valor.
+  sistema_origem            String    @db.Text
+  /// MCD-F9002 (Errata controlada nº2, ADR-D015) — identificador do registro
+  /// no sistema-fonte externo, nunca o `id` interno da CONTIFISC.
+  identificador_origem      String?   @db.VarChar(120)
+  /// MCD-F9003 (Errata controlada nº2, ADR-D015).
+  importado_em              DateTime? @db.Timestamptz
+  /// MCD-F9004 (Errata controlada nº2, ADR-D016) — DST-E009 (fechado). EIXO
+  /// ESTRITAMENTE INDEPENDENTE de status_qualidade_dado — proibido
+  /// sincronizar, derivar um do outro, ou tratar VALIDADO como equivalente a
+  /// VALIDO / RECONCILIADO como eliminação de DIVERGENTE (Salvaguarda 1).
+  status_processamento_dado String?   @db.Text
+  /// MCD-F9010 (Errata controlada nº2, ADR-D016) — DST-E011 (fechado). EIXO
+  /// ESTRITAMENTE INDEPENDENTE de status_processamento_dado (Salvaguarda 1).
+  status_qualidade_dado     String?   @db.Text
+  /// MCD-F9007 (Errata controlada nº2, ADR-D017) — momento do registro
+  /// canônico no armazenamento CONTIFISC.
+  registrado_em             DateTime  @db.Timestamptz
+  /// MCD-F9008 (Errata controlada nº2, ADR-D018) — data de ocorrência do
+  /// fato. TIMESTAMPTZ (decisão explícita desta atualização).
+  data_fato                 DateTime? @db.Timestamptz
+
   pessoa_fisica  PessoaFisica   @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
   fonte_pagadora FontePagadora? @relation(fields: [fonte_pagadora_id], references: [id], onDelete: Restrict)
 
@@ -414,16 +598,19 @@ model EventoIRPF {
 // Fonte Pagadora: origem pagadora de Receita/rendimento.
 // ============================================================================
 model FontePagadora {
-  id                   String  @id @db.Uuid
+  id                   String   @id @db.Uuid
   /// DST-E005 (fechado): PESSOA_FISICA | PESSOA_JURIDICA | EXTERIOR | OUTRA |
   /// NAO_INFORMADA. CHECK PostgreSQL obrigatório na migration futura
   /// (ADR-D010: TEXT + CHECK, não ENUM nativo).
-  tipo_fonte_pagadora  String  @db.Text
+  tipo_fonte_pagadora  String   @db.Text
   /// GAP-CDC-1.2-004 / GAP-MCD-CR2-005 — tipagem CPF/CNPJ/Exterior ainda em
   /// aberto (gap de modelagem/validação MCD/CDC, não é gap semântico DST).
   /// Não inventar union fechada aqui.
-  identificador_fiscal String? @db.VarChar(20)
-  nome                 String? @db.VarChar(200)
+  identificador_fiscal String?  @db.VarChar(20)
+  nome                 String?  @db.VarChar(200)
+  /// MCD-F9007 (Errata controlada nº2 do ADR-001, ADR-D017) — momento do
+  /// registro canônico no armazenamento CONTIFISC.
+  registrado_em        DateTime @db.Timestamptz
 
   receitas     Receita[]
   eventos_irpf EventoIRPF[]
@@ -441,6 +628,9 @@ model CenarioTributario {
   valor_carga_tributaria_projetada    Decimal? @db.Decimal(18, 2)
   valor_economia_tributaria_projetada Decimal? @db.Decimal(18, 2)
   unidade_economica_id                String   @db.Uuid
+  /// MCD-F9007 (Errata controlada nº2 do ADR-001, ADR-D017) — momento do
+  /// registro canônico no armazenamento CONTIFISC.
+  registrado_em                       DateTime @db.Timestamptz
 
   unidade_economica UnidadeEconomica @relation(fields: [unidade_economica_id], references: [id], onDelete: Restrict)
 
@@ -462,6 +652,11 @@ model ResultadoCalculo {
   /// Opaco até RGT-001 (ADR-GAP-005). Não é FK — nenhum modelo de regra existe ainda.
   rule_set_id           String   @db.VarChar(80)
   rule_set_version      String   @db.VarChar(20)
+  /// `ADR-GAP-008` (Errata controlada nº2 do ADR-001): MCD-F9007
+  /// (`registrado_em`) NÃO foi materializado neste model. A equivalência
+  /// semântica entre `calculado_em` (momento do cálculo) e `registrado_em`
+  /// (momento do registro canônico) não foi confirmada — não resolvido por
+  /// inferência. `calculado_em` permanece como já estava, sem renomeação.
   calculado_em          DateTime @db.Timestamptz
   /// DST-E006 (fechado): PENDENTE | APROVADO | REJEITADO | AJUSTE_SOLICITADO.
   /// CHECK PostgreSQL obrigatório na migration futura (ADR-D010).
@@ -481,13 +676,16 @@ model ResultadoCalculo {
 // Conflito de Dados: divergência auditável entre fontes/fatos candidatos.
 // ============================================================================
 model ConflitoDado {
-  id              String  @id @db.Uuid
+  id              String   @id @db.Uuid
   /// DST-E007 (fechado): ABERTO | EM_ANALISE | RESOLVIDO | DESCARTADO. CHECK
   /// PostgreSQL obrigatório na migration futura (ADR-D010: TEXT + CHECK, não ENUM nativo).
-  status_conflito String  @db.Text
+  status_conflito String   @db.Text
   /// DST-GAP-009 — Enum/Ref aberto (catálogo de tipo_conflito ainda não fechado). Obrigatório.
-  tipo_conflito   String  @db.Text
-  descricao       String? @db.Text
+  tipo_conflito   String   @db.Text
+  descricao       String?  @db.Text
+  /// MCD-F9007 (Errata controlada nº2 do ADR-001, ADR-D017) — momento do
+  /// registro canônico no armazenamento CONTIFISC.
+  registrado_em   DateTime @db.Timestamptz
 
   itens ConflitoDadoItem[]
 
@@ -512,23 +710,29 @@ model ConflitoDado {
 // auditoria/reconciliação/revisão (ver também RevisaoTecnica, abaixo).
 // ============================================================================
 model ConflitoDadoItem {
-  id                   String  @id @db.Uuid
-  conflito_dado_id     String  @db.Uuid
+  id                   String   @id @db.Uuid
+  conflito_dado_id     String   @db.Uuid
   /// DST-GAP-012 — Enum/Ref aberto, restrito ao domínio de auditoria. Obrigatório.
-  tipo_objeto          String  @db.Text
+  tipo_objeto          String   @db.Text
   /// Exceção polimórfica controlada de RECONCILIAÇÃO (sem FK): pode referenciar
   /// qualquer objeto canônico conforme `tipo_objeto`. Validação fica no
   /// serviço de domínio/auditoria, não no banco.
-  objeto_id            String? @db.Uuid
+  objeto_id            String?  @db.Uuid
   /// DST-E010 (fechado): ERP_CONTABIL | DOCUMENTO_FISCAL | CNIS |
   /// FOLHA_PAGAMENTO | BANCO | INFORME_RENDIMENTOS | CARNE_LEAO |
   /// ENTRADA_MANUAL | API_GOVERNAMENTAL | OUTRO_SISTEMA. CHECK PostgreSQL
   /// obrigatório na migration futura (ADR-D010: TEXT + CHECK, não ENUM nativo).
-  sistema_origem       String? @db.Text
-  identificador_origem String? @db.VarChar(120)
+  sistema_origem       String?  @db.Text
+  identificador_origem String?  @db.VarChar(120)
   /// DST-GAP-013 — Enum/Ref aberto.
-  papel_no_conflito    String? @db.Text
-  valor_hash           String? @db.VarChar(128)
+  papel_no_conflito    String?  @db.Text
+  valor_hash           String?  @db.VarChar(128)
+  /// MCD-F9007 (Errata controlada nº2 do ADR-001, ADR-D017) — momento do
+  /// registro canônico no armazenamento CONTIFISC. Distinto de
+  /// `sistema_origem`/`identificador_origem` acima, que são específicos do
+  /// domínio de reconciliação (papel/fonte do item no conflito), não os
+  /// campos transversais F9001/F9002 desta errata.
+  registrado_em        DateTime @db.Timestamptz
 
   conflito_dado ConflitoDado @relation(fields: [conflito_dado_id], references: [id], onDelete: Cascade)
 
@@ -573,6 +777,11 @@ model RevisaoTecnica {
   /// CHECK PostgreSQL obrigatório na migration futura (ADR-D010).
   status_revisao       String   @db.Text
   justificativa        String?  @db.Text
+  /// `ADR-GAP-008` (Errata controlada nº2 do ADR-001): MCD-F9007
+  /// (`registrado_em`) NÃO foi materializado neste model. A equivalência
+  /// semântica entre `revisado_em` (momento da revisão) e `registrado_em`
+  /// (momento do registro canônico) não foi confirmada — não resolvido por
+  /// inferência. `revisado_em` permanece como já estava, sem renomeação.
   revisado_em          DateTime @db.Timestamptz
 
   @@index([objeto_revisado_id])
