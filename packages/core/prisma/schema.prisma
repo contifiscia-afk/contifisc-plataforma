@@ -1,5 +1,5 @@
 // ============================================================================
-// schema.prisma — PRIMEIRA PROPOSTA (DRAFT, NÃO APROVADO)
+// schema.prisma — PRIMEIRA PROPOSTA (DRAFT, NÃO APROVADO) — v2, corrigida
 // ============================================================================
 // Baseline obrigatória: COT-001 V1.1 (corrigido por errata) / MCD-001 V1.2 /
 // CDC-001 V1.2 / DST-001 V1.2 / ADR-001 V1.0 (APROVADO — baseline física
@@ -8,6 +8,24 @@
 // Este arquivo é uma PROPOSTA para revisão humana. NÃO houve `prisma migrate`,
 // NÃO há banco de produção configurado, e este arquivo NÃO autoriza a
 // primeira migration (ADR-001 §15/§16, MIG-007).
+//
+// Correções desta v2 (3 achados RELEVANTE da v1, ver SCHEMA_V1_PROPOSAL_REPORT.md):
+// 1. Removidos os 9 `enum` nativos do Prisma. ADR-D010 prevalece: vocabulário
+//    semanticamente fechado no DST não implica PostgreSQL ENUM nativo. Os
+//    campos correspondentes voltam a ser `String`/`@db.Text`, com comentário
+//    ao lado listando os códigos DST vigentes e apontando que a migration
+//    futura deverá criar CHECK PostgreSQL (não ENUM) para fechá-los.
+// 2. `ResultadoCalculo.cenario_tributario` volta a `onDelete: Restrict`. O
+//    ADR-001 não autorizou cascade nessa relação ("possível cascade... após
+//    política explícita" não é uma decisão fechada) — política conservadora
+//    até existir decisão explícita.
+// 3. `RevisaoTecnica.objeto_revisado_id` formalizado como referência
+//    polimórfica controlada do domínio de REVISÃO/AUDITORIA — distinta da
+//    exceção polimórfica de `ConflitoDadoItem` (domínio de RECONCILIAÇÃO),
+//    mas do mesmo tipo estrutural (sem FK genérica). Ambas permanecem
+//    proibidas como mecanismo de ownership de Receita, fatos financeiros ou
+//    demais objetos tributários — que usam sempre FK real (+ XOR quando
+//    aplicável), nunca referência polimórfica.
 //
 // Convenções aplicadas (ADR-001 §4, MCD-001 V1.2 §3-4):
 // - Nomes de campo Prisma = nomes canônicos MCD-001 V1.2 literalmente
@@ -28,15 +46,18 @@
 //   criado como SQL manual na migration futura.
 // - Timestamps técnicos: `DateTime @db.Timestamptz` (ADR-D009). Datas civis
 //   (nascimento, abertura, vigência, emissão): `DateTime @db.Date`.
-// - Enums DST fechados (DST-001 V1.2 §4) são representados como `enum`
-//   nativo do Prisma nesta proposta, conforme instrução explícita desta
-//   etapa. ATENÇÃO — isso diverge de ADR-D010, que recomenda TEXT + CHECK em
-//   vez de ENUM nativo do PostgreSQL (para evitar as limitações de
-//   transação do `ALTER TYPE ... ADD VALUE`). Ver achado RELEVANTE no
-//   relatório desta etapa; a decisão final cabe à revisão humana do ADR.
-// - Campos `Enum/Ref` ainda ABERTOS no DST (DST-GAP-*) são `String` livre,
-//   sem lista fechada inventada, com largura não especificada pelo MCD ⇒
-//   `@db.Text` (nenhuma largura foi inventada).
+// - Vocabulário fechado do DST-001 V1.2 §4 (status_registro, regime_tributario,
+//   lado_extremidade, status_elegibilidade_equiparacao_hospitalar,
+//   tipo_rendimento_irpf, tipo_fonte_pagadora, status_revisao,
+//   status_conflito, sistema_origem): representado como `String`/`@db.Text`,
+//   NUNCA como `enum` nativo do Prisma/PostgreSQL (ADR-D010) — CHECK
+//   PostgreSQL é o mecanismo de fechamento, documentado por campo, não
+//   implementado nesta proposta. Nenhum documento canônico autorizou
+//   explicitamente ENUM nativo do PostgreSQL para nenhum campo; por isso a
+//   contagem de `enum` Prisma nesta proposta é zero.
+// - Campos `Enum/Ref` ainda ABERTOS no DST (DST-GAP-*) também são `String`
+//   livre / `@db.Text`, sem lista fechada inventada — mesma representação
+//   física do vocabulário fechado, distinguidos apenas pelo comentário.
 // - `relationMode = "foreignKeys"` conforme ADR-D013 (obrigatório) — a
 //   integridade referencial fica no PostgreSQL, nunca emulada no client.
 // - Metadados transversais (MCD-F9001..F9010: sistema_origem genérico,
@@ -58,119 +79,17 @@ datasource db {
 }
 
 // ============================================================================
-// ENUMS — somente códigos DST-001 V1.2 §4 efetivamente FECHADOS.
-// Nenhum enum foi criado para campo em DST-GAP aberto (instrução #19/#20).
-// ============================================================================
-
-/// DST-E008 — status_registro (ciclo de vida cadastral). Fechado.
-enum StatusRegistro {
-  ATIVO
-  INATIVO
-  ARQUIVADO
-
-  @@map("status_registro")
-}
-
-/// DST-E001 — regime_tributario. Fechado.
-enum RegimeTributario {
-  SIMPLES_NACIONAL
-  LUCRO_PRESUMIDO
-  LUCRO_REAL
-  OUTRO
-  NAO_INFORMADO
-
-  @@map("regime_tributario")
-}
-
-/// DST-E012 — lado_extremidade. Fechado (resolve o antigo DST-GAP-004).
-enum LadoExtremidade {
-  ORIGEM
-  DESTINO
-
-  @@map("lado_extremidade")
-}
-
-/// DST-E003 — status_elegibilidade_equiparacao_hospitalar. Fechado.
-enum StatusElegibilidadeEquiparacaoHospitalar {
-  EH_001_ELEGIVEL
-  EH_002_NAO_ELEGIVEL
-  EH_003_PENDENTE
-  EH_004_REVISAO_TECNICA
-
-  @@map("status_elegibilidade_equiparacao_hospitalar")
-}
-
-/// DST-E004 — tipo_rendimento_irpf. Fechado.
-enum TipoRendimentoIrpf {
-  TRIBUTAVEL
-  ISENTO_NAO_TRIBUTAVEL
-  TRIBUTACAO_EXCLUSIVA
-  OUTRO
-  NAO_INFORMADO
-
-  @@map("tipo_rendimento_irpf")
-}
-
-/// DST-E005 — tipo_fonte_pagadora. Fechado.
-enum TipoFontePagadora {
-  PESSOA_FISICA
-  PESSOA_JURIDICA
-  EXTERIOR
-  OUTRA
-  NAO_INFORMADA
-
-  @@map("tipo_fonte_pagadora")
-}
-
-/// DST-E006 — status_revisao. Fechado. Reaproveitado por ResultadoCalculo e RevisaoTecnica
-/// (obrigatoriedade difere por tabela — ver MCD-F8209 "Não" vs MCD-F8704 "Sim").
-enum StatusRevisao {
-  PENDENTE
-  APROVADO
-  REJEITADO
-  AJUSTE_SOLICITADO
-
-  @@map("status_revisao")
-}
-
-/// DST-E007 — status_conflito. Fechado.
-enum StatusConflito {
-  ABERTO
-  EM_ANALISE
-  RESOLVIDO
-  DESCARTADO
-
-  @@map("status_conflito")
-}
-
-/// DST-E010 — sistema_origem. Fechado. Usado aqui apenas no campo específico
-/// ConflitoDadoItem.sistema_origem (MCD-F8654) — não é o metadado transversal
-/// genérico (MCD-F9001), que não foi replicado nesta proposta (ver cabeçalho).
-enum SistemaOrigem {
-  ERP_CONTABIL
-  DOCUMENTO_FISCAL
-  CNIS
-  FOLHA_PAGAMENTO
-  BANCO
-  INFORME_RENDIMENTOS
-  CARNE_LEAO
-  ENTRADA_MANUAL
-  API_GOVERNAMENTAL
-  OUTRO_SISTEMA
-
-  @@map("sistema_origem")
-}
-
-// ============================================================================
 // COT-OBJ-001 -> MCD-F0001..F0005 -> CDC-UE-001 -> DST-T001
 // Unidade Econômica: contexto agregador; não é sujeito tributário.
 // ============================================================================
 model UnidadeEconomica {
-  id              String         @id @db.Uuid
-  nome            String         @db.VarChar(160)
-  status_registro StatusRegistro
-  criado_em       DateTime       @db.Timestamptz
-  atualizado_em   DateTime       @db.Timestamptz
+  id              String   @id @db.Uuid
+  nome            String   @db.VarChar(160)
+  /// DST-E008 (fechado): ATIVO | INATIVO | ARQUIVADO. CHECK PostgreSQL
+  /// obrigatório na migration futura (ADR-D010: TEXT + CHECK, não ENUM nativo).
+  status_registro String   @db.Text
+  criado_em       DateTime @db.Timestamptz
+  atualizado_em   DateTime @db.Timestamptz
 
   vinculo_extremidades VinculoExtremidade[]
   cenarios_tributarios CenarioTributario[]
@@ -208,13 +127,16 @@ model PessoaFisica {
 // Pessoa Jurídica: identidade tributária PJ. CNPJ não é PK interna.
 // ============================================================================
 model PessoaJuridica {
-  id                String            @id @db.Uuid
-  cnpj              String?           @db.VarChar(14)
-  razao_social      String?           @db.VarChar(200)
-  regime_tributario RegimeTributario?
-  cnae_principal    String?           @db.VarChar(7)
-  data_abertura     DateTime?         @db.Date
-  municipio_ibge    String?           @db.VarChar(7)
+  id                String    @id @db.Uuid
+  cnpj              String?   @db.VarChar(14)
+  razao_social      String?   @db.VarChar(200)
+  /// DST-E001 (fechado): SIMPLES_NACIONAL | LUCRO_PRESUMIDO | LUCRO_REAL |
+  /// OUTRO | NAO_INFORMADO. CHECK PostgreSQL obrigatório na migration futura
+  /// (ADR-D010: TEXT + CHECK, não ENUM nativo).
+  regime_tributario String?   @db.Text
+  cnae_principal    String?   @db.VarChar(7)
+  data_abertura     DateTime? @db.Date
+  municipio_ibge    String?   @db.VarChar(7)
 
   vinculo_extremidades VinculoExtremidade[]
   receitas             Receita[]
@@ -256,13 +178,14 @@ model Vinculo {
 // Materializa ORIGEM/DESTINO de Vinculo com FK real para UE, PF ou PJ.
 // ============================================================================
 model VinculoExtremidade {
-  id                   String          @id @db.Uuid
-  vinculo_id           String          @db.Uuid
-  /// ADR-C004 — DST-E012, enum fechado ORIGEM/DESTINO.
-  lado_extremidade     LadoExtremidade
-  unidade_economica_id String?         @db.Uuid
-  pessoa_fisica_id     String?         @db.Uuid
-  pessoa_juridica_id   String?         @db.Uuid
+  id                   String  @id @db.Uuid
+  vinculo_id           String  @db.Uuid
+  /// ADR-C004 — DST-E012 (fechado): ORIGEM | DESTINO. CHECK PostgreSQL
+  /// obrigatório na migration futura (ADR-D010: TEXT + CHECK, não ENUM nativo).
+  lado_extremidade     String  @db.Text
+  unidade_economica_id String? @db.Uuid
+  pessoa_fisica_id     String? @db.Uuid
+  pessoa_juridica_id   String? @db.Uuid
 
   vinculo           Vinculo           @relation(fields: [vinculo_id], references: [id], onDelete: Restrict)
   unidade_economica UnidadeEconomica? @relation(fields: [unidade_economica_id], references: [id], onDelete: Restrict)
@@ -300,7 +223,8 @@ model Receita {
   valor_retencoes     Decimal?  @db.Decimal(18, 2)
   /// ADR-C001 — CHECK PostgreSQL obrigatório na migration: exatamente um dos
   /// owners PF/PJ deve estar preenchido (pessoa_fisica_id XOR pessoa_juridica_id).
-  /// NÃO representável apenas pela tipagem Prisma.
+  /// NÃO representável apenas pela tipagem Prisma. Receita usa FK real com
+  /// XOR — nunca referência polimórfica (diferente de ConflitoDadoItem/RevisaoTecnica).
   pessoa_fisica_id    String?   @db.Uuid
   pessoa_juridica_id  String?   @db.Uuid
 
@@ -401,18 +325,21 @@ model DocumentoFiscalArquivoOrigem {
 // Nenhuma lógica tributária executável aqui — critérios jurídicos pertencem ao RGT-001.
 // ============================================================================
 model ClassificacaoEquiparacaoHospitalar {
-  id                                          String                                    @id @db.Uuid
-  status_elegibilidade_equiparacao_hospitalar StatusElegibilidadeEquiparacaoHospitalar?
-  percentual_receita_elegivel                 Decimal?                                  @db.Decimal(7, 4)
-  valor_receita_elegivel                      Decimal?                                  @db.Decimal(18, 2)
-  valor_receita_nao_elegivel                  Decimal?                                  @db.Decimal(18, 2)
-  percentual_confianca_classificacao          Decimal?                                  @db.Decimal(7, 4)
+  id                                          String    @id @db.Uuid
+  /// DST-E003 (fechado): EH_001_ELEGIVEL | EH_002_NAO_ELEGIVEL |
+  /// EH_003_PENDENTE | EH_004_REVISAO_TECNICA. CHECK PostgreSQL obrigatório
+  /// na migration futura (ADR-D010: TEXT + CHECK, não ENUM nativo).
+  status_elegibilidade_equiparacao_hospitalar String?   @db.Text
+  percentual_receita_elegivel                 Decimal?  @db.Decimal(7, 4)
+  valor_receita_elegivel                      Decimal?  @db.Decimal(18, 2)
+  valor_receita_nao_elegivel                  Decimal?  @db.Decimal(18, 2)
+  percentual_confianca_classificacao          Decimal?  @db.Decimal(7, 4)
   eh_validada_tecnicamente                    Boolean?
-  receita_id                                  String                                    @db.Uuid
+  receita_id                                  String    @db.Uuid
   /// Opaco até RGT-001 (MCD §14/ADR-GAP-005). Não é FK — nenhum modelo de regra existe ainda.
-  regra_versao_id                             String?                                   @db.VarChar(120)
-  registrado_em                               DateTime                                  @db.Timestamptz
-  atualizado_em                               DateTime?                                 @db.Timestamptz
+  regra_versao_id                             String?   @db.VarChar(120)
+  registrado_em                               DateTime  @db.Timestamptz
+  atualizado_em                               DateTime? @db.Timestamptz
 
   receita Receita @relation(fields: [receita_id], references: [id], onDelete: Restrict)
 
@@ -462,16 +389,19 @@ model VinculoPrevidenciario {
 // Evento IRPF/Carnê-Leão: fato relevante ao IRPF, independente de existir PJ.
 // ============================================================================
 model EventoIRPF {
-  id                          String              @id @db.Uuid
-  tipo_rendimento_irpf        TipoRendimentoIrpf?
-  valor_rendimento_tributavel Decimal?            @db.Decimal(18, 2)
-  valor_rendimento_isento     Decimal?            @db.Decimal(18, 2)
-  valor_deducao_irpf          Decimal?            @db.Decimal(18, 2)
-  valor_livro_caixa           Decimal?            @db.Decimal(18, 2)
-  valor_irpf_retido           Decimal?            @db.Decimal(18, 2)
-  valor_irpf_projetado        Decimal?            @db.Decimal(18, 2)
-  pessoa_fisica_id            String              @db.Uuid
-  fonte_pagadora_id           String?             @db.Uuid
+  id                          String   @id @db.Uuid
+  /// DST-E004 (fechado): TRIBUTAVEL | ISENTO_NAO_TRIBUTAVEL |
+  /// TRIBUTACAO_EXCLUSIVA | OUTRO | NAO_INFORMADO. CHECK PostgreSQL
+  /// obrigatório na migration futura (ADR-D010: TEXT + CHECK, não ENUM nativo).
+  tipo_rendimento_irpf        String?  @db.Text
+  valor_rendimento_tributavel Decimal? @db.Decimal(18, 2)
+  valor_rendimento_isento     Decimal? @db.Decimal(18, 2)
+  valor_deducao_irpf          Decimal? @db.Decimal(18, 2)
+  valor_livro_caixa           Decimal? @db.Decimal(18, 2)
+  valor_irpf_retido           Decimal? @db.Decimal(18, 2)
+  valor_irpf_projetado        Decimal? @db.Decimal(18, 2)
+  pessoa_fisica_id            String   @db.Uuid
+  fonte_pagadora_id           String?  @db.Uuid
 
   pessoa_fisica  PessoaFisica   @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
   fonte_pagadora FontePagadora? @relation(fields: [fonte_pagadora_id], references: [id], onDelete: Restrict)
@@ -484,13 +414,16 @@ model EventoIRPF {
 // Fonte Pagadora: origem pagadora de Receita/rendimento.
 // ============================================================================
 model FontePagadora {
-  id                   String            @id @db.Uuid
-  tipo_fonte_pagadora  TipoFontePagadora
+  id                   String  @id @db.Uuid
+  /// DST-E005 (fechado): PESSOA_FISICA | PESSOA_JURIDICA | EXTERIOR | OUTRA |
+  /// NAO_INFORMADA. CHECK PostgreSQL obrigatório na migration futura
+  /// (ADR-D010: TEXT + CHECK, não ENUM nativo).
+  tipo_fonte_pagadora  String  @db.Text
   /// GAP-CDC-1.2-004 / GAP-MCD-CR2-005 — tipagem CPF/CNPJ/Exterior ainda em
   /// aberto (gap de modelagem/validação MCD/CDC, não é gap semântico DST).
   /// Não inventar union fechada aqui.
-  identificador_fiscal String?           @db.VarChar(20)
-  nome                 String?           @db.VarChar(200)
+  identificador_fiscal String? @db.VarChar(20)
+  nome                 String? @db.VarChar(200)
 
   receitas     Receita[]
   eventos_irpf EventoIRPF[]
@@ -521,23 +454,24 @@ model CenarioTributario {
 // Resultado de Cálculo: resultado reproduzível (snapshot/engine/regras).
 // ============================================================================
 model ResultadoCalculo {
-  id                    String         @id @db.Uuid
-  cenario_tributario_id String?        @db.Uuid
-  input_snapshot_hash   String         @db.VarChar(128)
-  engine_id             String         @db.VarChar(80)
-  engine_version        String         @db.VarChar(20)
+  id                    String   @id @db.Uuid
+  cenario_tributario_id String?  @db.Uuid
+  input_snapshot_hash   String   @db.VarChar(128)
+  engine_id             String   @db.VarChar(80)
+  engine_version        String   @db.VarChar(20)
   /// Opaco até RGT-001 (ADR-GAP-005). Não é FK — nenhum modelo de regra existe ainda.
-  rule_set_id           String         @db.VarChar(80)
-  rule_set_version      String         @db.VarChar(20)
-  calculado_em          DateTime       @db.Timestamptz
-  status_revisao        StatusRevisao?
+  rule_set_id           String   @db.VarChar(80)
+  rule_set_version      String   @db.VarChar(20)
+  calculado_em          DateTime @db.Timestamptz
+  /// DST-E006 (fechado): PENDENTE | APROVADO | REJEITADO | AJUSTE_SOLICITADO.
+  /// CHECK PostgreSQL obrigatório na migration futura (ADR-D010).
+  status_revisao        String?  @db.Text
 
-  /// ADR §8: "Cenários: possível cascade interno do cenário após política
-  /// explícita" — Cascade aplicado aqui como leitura dessa frase (resultado é
-  /// dado derivado do cenário, não fato oficial independente). Sinalizado
-  /// como decisão a confirmar no relatório desta etapa (a frase do ADR não é
-  /// uma decisão fechada, "após política explícita").
-  cenario_tributario CenarioTributario? @relation(fields: [cenario_tributario_id], references: [id], onDelete: Cascade)
+  /// Corrigido: Restrict (não Cascade). O ADR-001 §8 apenas menciona
+  /// "possível cascade interno do cenário após política explícita" — essa
+  /// política explícita ainda não existe. Restrict é a postura conservadora
+  /// padrão até uma decisão futura autorizar Cascade explicitamente.
+  cenario_tributario CenarioTributario? @relation(fields: [cenario_tributario_id], references: [id], onDelete: Restrict)
 
   @@map("resultado_calculo")
 }
@@ -547,11 +481,13 @@ model ResultadoCalculo {
 // Conflito de Dados: divergência auditável entre fontes/fatos candidatos.
 // ============================================================================
 model ConflitoDado {
-  id              String         @id @db.Uuid
-  status_conflito StatusConflito
+  id              String  @id @db.Uuid
+  /// DST-E007 (fechado): ABERTO | EM_ANALISE | RESOLVIDO | DESCARTADO. CHECK
+  /// PostgreSQL obrigatório na migration futura (ADR-D010: TEXT + CHECK, não ENUM nativo).
+  status_conflito String  @db.Text
   /// DST-GAP-009 — Enum/Ref aberto (catálogo de tipo_conflito ainda não fechado). Obrigatório.
-  tipo_conflito   String         @db.Text
-  descricao       String?        @db.Text
+  tipo_conflito   String  @db.Text
+  descricao       String? @db.Text
 
   itens ConflitoDadoItem[]
 
@@ -561,24 +497,38 @@ model ConflitoDado {
 // ============================================================================
 // COT-SUP-004 -> MCD-F8650..F8657 -> CDC-CFD-002 -> DST-T019
 // Estrutura de suporte de auditoria — NÃO é objeto tributário de negócio.
-// `objeto_id`/`tipo_objeto` são a EXCEÇÃO POLIMÓRFICA CONTROLADA prevista
-// pelo MCD/CDC/COT, restrita ao domínio de auditoria/reconciliação.
-// NÃO criar FK genérica (é impossível fisicamente) e NÃO reutilizar esse
-// padrão em objetos financeiros (Receita, Vinculo, etc. usam FK real + XOR).
+//
+// `objeto_id`/`tipo_objeto`: EXCEÇÃO POLIMÓRFICA CONTROLADA DE RECONCILIAÇÃO
+// (domínio de qualidade/reconciliação de dados), prevista pelo MCD/CDC/COT.
+// NÃO existe FK PostgreSQL genérica para `objeto_id` — é fisicamente
+// impossível apontar uma única FK para múltiplas tabelas de destino. A
+// integridade dessa referência é validada pela camada de domínio/aplicação
+// e auditada, não pelo banco. `tipo_objeto` permanece Enum/Ref aberto
+// (DST-GAP-012) enquanto o catálogo correspondente não for fechado.
+//
+// Este padrão é PROIBIDO como mecanismo de ownership de Receita, Vinculo ou
+// qualquer outro objeto financeiro/tributário — esses sempre usam FK real
+// (com XOR quando aplicável). Não reutilizar esta exceção fora do domínio de
+// auditoria/reconciliação/revisão (ver também RevisaoTecnica, abaixo).
 // ============================================================================
 model ConflitoDadoItem {
-  id                   String         @id @db.Uuid
-  conflito_dado_id     String         @db.Uuid
+  id                   String  @id @db.Uuid
+  conflito_dado_id     String  @db.Uuid
   /// DST-GAP-012 — Enum/Ref aberto, restrito ao domínio de auditoria. Obrigatório.
-  tipo_objeto          String         @db.Text
-  /// Exceção polimórfica controlada (sem FK): pode referenciar qualquer objeto
-  /// canônico conforme `tipo_objeto`. Validação fica no serviço de domínio/auditoria.
-  objeto_id            String?        @db.Uuid
-  sistema_origem       SistemaOrigem?
-  identificador_origem String?        @db.VarChar(120)
+  tipo_objeto          String  @db.Text
+  /// Exceção polimórfica controlada de RECONCILIAÇÃO (sem FK): pode referenciar
+  /// qualquer objeto canônico conforme `tipo_objeto`. Validação fica no
+  /// serviço de domínio/auditoria, não no banco.
+  objeto_id            String? @db.Uuid
+  /// DST-E010 (fechado): ERP_CONTABIL | DOCUMENTO_FISCAL | CNIS |
+  /// FOLHA_PAGAMENTO | BANCO | INFORME_RENDIMENTOS | CARNE_LEAO |
+  /// ENTRADA_MANUAL | API_GOVERNAMENTAL | OUTRO_SISTEMA. CHECK PostgreSQL
+  /// obrigatório na migration futura (ADR-D010: TEXT + CHECK, não ENUM nativo).
+  sistema_origem       String? @db.Text
+  identificador_origem String? @db.VarChar(120)
   /// DST-GAP-013 — Enum/Ref aberto.
-  papel_no_conflito    String?        @db.Text
-  valor_hash           String?        @db.VarChar(128)
+  papel_no_conflito    String? @db.Text
+  valor_hash           String? @db.VarChar(128)
 
   conflito_dado ConflitoDado @relation(fields: [conflito_dado_id], references: [id], onDelete: Cascade)
 
@@ -589,22 +539,41 @@ model ConflitoDadoItem {
 
 // ============================================================================
 // COT-OBJ-016 -> MCD-F8701..F8706 -> CDC-REV-001 -> DST-T020
-// Revisão Técnica: decisão humana auditável. `objeto_revisado_id` segue a
-// MESMA exceção polimórfica controlada de ConflitoDadoItem (MCD/CDC/COT
-// referenciam Revisão a partir de múltiplos objetos — EqHop, ConflitoDado
-// etc. — sem um FK único possível). Identidade/autorização do revisor
-// permanece BLOQUEADA até SEC-001/OBS-001 (ADR-GAP-004) — nenhum
-// usuario_id/revisor_id foi criado por inferência.
+// Revisão Técnica: decisão humana auditável.
+//
+// `objeto_revisado_id`/`tipo_objeto_revisado`: EXCEÇÃO POLIMÓRFICA
+// CONTROLADA DE REVISÃO/AUDITORIA (domínio de revisão técnica humana) —
+// estruturalmente do mesmo tipo que a exceção de `ConflitoDadoItem` (acima),
+// mas conceitualmente distinta: aqui a referência é a um objeto/resultado
+// sendo revisado (EqHop, ConflitoDado, ResultadoCalculo etc. — COT-001 V1.1
+// COT-REL-117/118), não a um participante de conflito. NÃO existe FK
+// PostgreSQL genérica para `objeto_revisado_id` — mesma razão física de
+// ConflitoDadoItem. A integridade dessa referência é validada pela camada de
+// domínio/aplicação e auditada, não pelo banco. `tipo_objeto_revisado`
+// permanece Enum/Ref aberto (DST-GAP-010) enquanto o catálogo correspondente
+// não for fechado — nenhum valor foi inventado.
+//
+// Identidade/autorização do revisor permanece BLOQUEADA até SEC-001/OBS-001
+// (ADR-GAP-004) — nenhum usuario_id/revisor_id foi criado por inferência.
+//
+// Este padrão é PROIBIDO como mecanismo de ownership de Receita ou qualquer
+// outro objeto financeiro/tributário — esses sempre usam FK real. Não
+// generalizar esta exceção para nenhum outro model além de ConflitoDadoItem
+// e RevisaoTecnica.
 // ============================================================================
 model RevisaoTecnica {
-  id                   String        @id @db.Uuid
-  /// Exceção polimórfica controlada (sem FK) — mesmo padrão de ConflitoDadoItem.
-  objeto_revisado_id   String        @db.Uuid
+  id                   String   @id @db.Uuid
+  /// Exceção polimórfica controlada de REVISÃO/AUDITORIA (sem FK) — ver
+  /// comentário do model acima. Distinta da exceção de ConflitoDadoItem
+  /// (RECONCILIAÇÃO), mesmo padrão estrutural.
+  objeto_revisado_id   String   @db.Uuid
   /// DST-GAP-010 — Enum/Ref aberto. Obrigatório.
-  tipo_objeto_revisado String        @db.Text
-  status_revisao       StatusRevisao
-  justificativa        String?       @db.Text
-  revisado_em          DateTime      @db.Timestamptz
+  tipo_objeto_revisado String   @db.Text
+  /// DST-E006 (fechado): PENDENTE | APROVADO | REJEITADO | AJUSTE_SOLICITADO.
+  /// CHECK PostgreSQL obrigatório na migration futura (ADR-D010).
+  status_revisao       String   @db.Text
+  justificativa        String?  @db.Text
+  revisado_em          DateTime @db.Timestamptz
 
   @@index([objeto_revisado_id])
   @@map("revisao_tecnica")
