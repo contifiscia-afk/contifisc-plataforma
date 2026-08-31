@@ -101,17 +101,21 @@ abaixo os reavalia já corrigidos.
 | N:N (`ReceitaDocumentoFiscal`, `DocumentoFiscalArquivoOrigem`) | Consistente. `ADR-C006`/`C007` e a tabela de mapeamento (§3) batem com `COT-SUP-002`/`003` e `CDC-FIS-002`/`003`. |
 | Delete policies | Consistente. A política conservadora do ADR §8 (RESTRICT/NO ACTION para fatos/evidência, cascade só na linha associativa) é exatamente o que o MCD-001 V1.2 §12 delegou ao ADR ("política de deleção será definida no ADR"). |
 | Enum/Ref abertos | Consistente. `ADR-D010` e `ADR-GAP-002/003` continuam sem fechar `papel_arquivo`/`tipo_objeto`/`papel_no_conflito` (`DST-GAP-011/012/013`); nenhum enum foi inventado pela errata. |
-| Gaps deliberadamente não resolvidos | Inalterados e ainda corretos: `ADR-GAP-001..006` continuam mapeados ao registro de gaps DST/CDC/MCD acima; a errata não fechou nem tentou fechar nenhum deles. |
+| Gaps deliberadamente não resolvidos | `ADR-GAP-001..006` inalterados. **Errata controlada nº2 (2026-08-31)** acrescentou `ADR-GAP-007` (MCD-F9009 em `receita`/`contribuicao_previdenciaria`/`evento_irpf`, sem FK por inferência) e `ADR-GAP-008` (MCD-F9007 não confirmado equivalente a `resultado_calculo.calculado_em`/`revisao_tecnica.revisado_em`) — ver `docs/ADR-001_..._V1.0.md` §2/§14. |
 
 **Achados remanescentes:**
 
 | Severidade | Achado |
 |---|---|
 | **OBSERVAÇÃO** (herdada, ainda válida) | Nenhum código do repositório declara dependência de Prisma ainda; a interoperabilidade do client Prisma (CJS) com `"type": "module"` em `packages/core` deve ser validada na PoC, não presumida. |
+| **RELEVANTE** (Errata controlada nº2, registrado como `ADR-GAP-008`, não resolvido por inferência) | A verificação semântica de MCD-F9007 (`registrado_em`) não confirmou equivalência entre `resultado_calculo.calculado_em`/`revisao_tecnica.revisado_em` e o campo transversal `registrado_em` — o MCD-001 V1.2 define os três com textos distintos ("momento do cálculo"/"momento da revisão" vs. "momento do registro canônico"), sem afirmar que são a mesma ocorrência temporal. |
+| **CRÍTICO corrigido nesta mesma rodada** (achado da própria auditoria de fechamento da Errata nº2) | Uma redação preliminar do achado acima e de `ADR-GAP-008` citava um "envelope de evento `occurred_at`/`recorded_at`" como se fosse da `CDC-001 V1.2 §11` — mas esse envelope só existe na `CDC-001 V1.0`/`V1.1`, ambas `SUPERSEDED` (§11 da V1.2 vigente é "Lacunas residuais após V1.2", sem esse conteúdo). Corrigido no próprio `docs/ADR-001_..._V1.0.md` e aqui antes da conclusão da errata, para não citar documento superado como fundamento de decisão vigente. |
 
 O achado EDITORIAL da rodada anterior (referência a `COT-REL-NORM-001`) foi corrigido no próprio
-ADR-001 antes da aprovação. **Nenhuma inconsistência CRÍTICA ou RELEVANTE remanescente** entre
-COT-001 V1.1 × MCD-001 V1.2 × CDC-001 V1.2 × DST-001 V1.2 × ADR-001 (aprovado).
+ADR-001 antes da aprovação. **Nenhuma inconsistência CRÍTICA remanescente** entre COT-001 V1.1 ×
+MCD-001 V1.2 × CDC-001 V1.2 × DST-001 V1.2 × ADR-001 (aprovado, com Errata controlada nº2
+incorporada); a única pendência RELEVANTE é a acima, explicitamente registrada como `ADR-GAP-008`
+e não resolvida por inferência.
 
 ## Também pendente
 

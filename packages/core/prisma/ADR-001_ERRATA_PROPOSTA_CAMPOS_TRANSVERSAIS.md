@@ -1,6 +1,9 @@
 # Proposta de Errata/Revisão do ADR-001 — Estratégia Física dos Campos Transversais (MCD-F9001..F9010)
 
-**Status:** PROPOSTO PARA APROVAÇÃO — documento autônomo, ainda não incorporado ao ADR-001.
+**Status:** APROVADO E INCORPORADO — incorporado ao ADR-001 V1.0 em 2026-08-31 como "Errata
+controlada nº2 (pós-aprovação)" (ver `docs/ADR-001_CONTIFISC_Schema_Fisico_PostgreSQL_Prisma_V1.0.md`,
+§2 ADR-D015..D019, §14 ADR-GAP-007/ADR-GAP-008). Este documento é preservado como registro
+histórico da proposta original; o texto vigente é o do ADR-001 incorporado, não este arquivo.
 **Alvo:** `docs/ADR-001_CONTIFISC_Schema_Fisico_PostgreSQL_Prisma_V1.0.md` (aprovado — baseline
 física para PoC).
 **Dependências:** MCD-001 V1.2 §8/§10, CDC-001 V1.2 §3/§8/§9/CDC-SYS-001, DST-001 V1.2 §5/§6/§10,

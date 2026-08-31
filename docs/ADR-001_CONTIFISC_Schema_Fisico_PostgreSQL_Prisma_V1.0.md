@@ -1,7 +1,7 @@
 # ADR-001 — Schema Físico PostgreSQL/Prisma da CONTIFISC
 
 **Versão:** 1.0  
-**Status:** APROVADO — baseline física autorizada para PoC; schema e migrations ainda não autorizados (publicação corrigida por errata; ver nota abaixo)  
+**Status:** APROVADO — baseline física autorizada para PoC; schema e migrations ainda não autorizados (publicação corrigida por errata; errata controlada nº2 incorporada em 2026-08-31 — ver notas abaixo)  
 **Tipo:** Architecture Decision Record  
 **Baseline obrigatória:** COT-001 V1.1 (publicação corrigida), MCD-001 V1.2, CDC-001 V1.2, DST-001 V1.2  
 **Escopo:** decisões físicas de persistência relacional; não altera o domínio canônico
@@ -18,6 +18,71 @@ MCD-001 V1.2 §5 — corrigido para citar essa escala diretamente, sem reabrir a
 escolha física preferencial de `competencia` foi corrigida de `CHAR(7)` para `VARCHAR(7)`,
 mantendo o CHECK de formato/mês obrigatório; (4) declarada `PostgreSQL >= 15` como baseline
 técnica (ADR-D014), sem vincular o domínio canônico a essa versão especificamente.
+
+### Errata controlada nº2 (pós-aprovação) — Estratégia física dos campos transversais MCD-F9001..F9010
+
+**Data:** 2026-08-31.
+**Motivo:** este ADR (§10) e o MCD-001 V1.2 (§10) haviam deixado em aberto a estratégia física
+para os 10 campos transversais de proveniência/estado. Esta errata incorpora a decisão tomada
+após análise arquitetural dedicada (comparando coluna repetida, composição de aplicação,
+entidade relacional própria e combinação por categoria), aprovada para incorporação, e uma
+verificação semântica obrigatória sobre quais campos domésticos já existentes poderiam
+substituir `registrado_em` (MCD-F9007).
+
+As decisões desta errata estão detalhadas como `ADR-D015..D019` (§2) e um novo gap `ADR-GAP-007`
+e `ADR-GAP-008` (§14). Resumo:
+
+- **F9001/F9002/F9003** (`sistema_origem`/`identificador_origem`/`importado_em`): coluna física
+  em `receita`, `contribuicao_previdenciaria`, `evento_irpf`, `documento_fiscal`. Sem entidade
+  relacional genérica de proveniência e sem referência polimórfica reversa.
+- **F9004/F9010** (`status_processamento_dado`/`status_qualidade_dado`): coluna física nos
+  mesmos quatro objetos, sempre os dois juntos, **eixos estritamente independentes** — nenhuma
+  constraint, trigger ou lógica de aplicação pode sincronizá-los, derivar um do outro, ou tratar
+  `VALIDADO` como equivalente a `VALIDO`, nem `RECONCILIADO` como eliminação automática de
+  `DIVERGENTE`.
+- **F9005/F9006** (`versao_schema`/`correlation_id`): permanecem **`DECISÃO_BLOQUEADA` —
+  BLOQUEADO POR EVT-001/INT-001**. A materialização dos demais oito campos não autoriza,
+  antecipa ou implica nenhuma decisão sobre estes dois.
+- **F9007** (`registrado_em`): coluna em 16 objetos (ver ADR-D017). Confirmado **equivalente e
+  não duplicado** em `unidade_economica` (`criado_em`) e `classificacao_equiparacao_hospitalar`
+  (`registrado_em`, mesmo campo, MCD-F5010). **Não confirmado** em `resultado_calculo`
+  (`calculado_em`) e `revisao_tecnica` (`revisado_em`) — ver achado RELEVANTE abaixo e `ADR-GAP-008`.
+- **F9008** (`data_fato`): coluna nos três fatos puros (`receita`, `contribuicao_previdenciaria`,
+  `evento_irpf`).
+- **F9009** (`arquivo_origem_id`): via relacionamento já existente em `documento_fiscal`
+  (`documento_fiscal_arquivo_origem`); gap registrado (`ADR-GAP-007`) para `receita`,
+  `contribuicao_previdenciaria`, `evento_irpf`, sem FK criada por inferência.
+
+**Achado RELEVANTE desta errata (não resolvido por inferência):** a verificação semântica de
+F9007 mostrou que o próprio catálogo MCD-001 V1.2 define os três campos com textos distintos:
+`MCD-F8208 calculado_em` = "momento do cálculo", `MCD-F8706 revisado_em` = "momento da revisão",
+`MCD-F9007 registrado_em` = "momento do registro canônico". Nada no texto do MCD-001 V1.2 afirma
+que "momento do cálculo"/"momento da revisão" e "momento do registro canônico" são a mesma
+ocorrência temporal — um cálculo/revisão pode, em tese, ocorrer em um instante e ser gravado no
+armazenamento canônico em outro. Similaridade de nome, tipo (`TIMESTAMPTZ`) ou função aparente não
+foi considerada suficiente para presumir equivalência apenas com base nesse texto. Este ADR **não
+decide** se esses dois campos substituem `registrado_em` nesses dois objetos ou se cada um precisa
+de uma coluna `registrado_em` adicional — fica registrado como `ADR-GAP-008`, aberto para decisão
+explícita futura. (Nota de correção: uma redação preliminar desta errata citou incorretamente um
+"envelope de evento `occurred_at`/`recorded_at`" da CDC-001 V1.2 §11 como fundamento adicional;
+essa distinção existiu apenas na CDC-001 V1.0/V1.1, ambas `SUPERSEDED`, e foi removida da CDC-001
+V1.2 — a citação foi corrigida nesta mesma errata para não se apoiar em conteúdo de documento
+superado.)
+
+**Distinção RAW / Canonical / Derived preservada:** `arquivo_origem` continua a única fonte de
+evidência RAW imutável; `documento_fiscal` é a representação canônica normalizada;
+`classificacao_equiparacao_hospitalar`/`resultado_calculo` continuam resultados derivados. Os
+campos de proveniência desta errata (F9001/F9002/F9003/F9009) descrevem a **origem primária** do
+fato canônico — de onde ele veio antes de virar dado canônico — e não substituem, resumem ou
+duplicam as **evidências adicionais** já modeladas especificamente (`ArquivoOrigem`,
+`DocumentoFiscalArquivoOrigem`) nem o histórico de reconciliação (`ConflitoDado`/`ConflitoDadoItem`).
+
+**Proibição explícita reafirmada:** nenhuma entidade relacional genérica de proveniência foi
+criada; nenhuma referência polimórfica reversa foi usada para os campos de origem ou evidência
+incorporados por esta errata. O padrão de referência polimórfica controlada continua restrito às
+exceções já fechadas — reconciliação (`ConflitoDadoItem`) e revisão/auditoria
+(`RevisaoTecnica.objeto_revisado_id`) — e nunca é reaproveitado como atalho de proveniência
+financeira.
 
 ## 1. Contexto e decisão
 
@@ -41,6 +106,11 @@ A CONTIFISC utilizará PostgreSQL como banco relacional canônico e Prisma como 
 | ADR-D012 | Proveniência | Metadados canônicos preservados; RAW imutável | Reprocessamento não destrói evidência. |
 | ADR-D013 | Prisma relationMode | `relationMode = "foreignKeys"` (obrigatório) | A integridade referencial permanece no PostgreSQL, nunca emulada no client. `relationMode = "prisma"` é **proibido** para o schema canônico da CONTIFISC — mudar essa decisão exige novo ADR ou revisão formal deste. A futura revisão do `schema.prisma` deve verificar explicitamente essa configuração antes de qualquer migration. |
 | ADR-D014 | Versão mínima do PostgreSQL | PostgreSQL >= 15 | Baseline técnica declarada para viabilizar recursos usados neste ADR (ex.: `gen_random_uuid()` nativo). Não vincula o domínio canônico a uma versão específica. A versão efetivamente usada em desenvolvimento/staging/produção deve ser registrada e validada antes da primeira migration; recursos específicos de versão devem ser verificados contra essa baseline. |
+| ADR-D015 | Proveniência de origem (MCD-F9001/F9002/F9003) | Coluna física em `receita`, `contribuicao_previdenciaria`, `evento_irpf`, `documento_fiscal`. `sistema_origem`: TEXT + CHECK futuro contra DST-E010 (nunca ENUM nativo, ADR-D010); nunca infraestrutura (PostgreSQL/Prisma/Neon/Vercel). `identificador_origem`: VARCHAR(120) — identifica o registro no **sistema-fonte externo**, nunca o `id` interno da CONTIFISC. `importado_em`: TIMESTAMPTZ. | Sem entidade relacional genérica de proveniência e sem referência polimórfica reversa nesta fase — cada coluna é local ao fato/documento que a usa. Na camada TypeScript, os três campos podem ser expostos como composição lógica compartilhada (ex.: tipo `ProvenienciaFato`), sem tabela/relação física correspondente. MCD-001 V1.2 §8/§10; CDC-001 V1.2 §3/§9/CDC-SYS-001; DST-001 V1.2 §2/§10/DST-E010. |
+| ADR-D016 | Estado duplo do dado (MCD-F9004/F9010) | Coluna física em `receita`, `contribuicao_previdenciaria`, `evento_irpf`, `documento_fiscal` para `status_processamento_dado` (TEXT + CHECK futuro contra DST-E009) e `status_qualidade_dado` (TEXT + CHECK futuro contra DST-E011), sempre os dois juntos nesses quatro objetos. | Eixos **estruturalmente colocados, semanticamente independentes**: proibido qualquer constraint, trigger, default ou lógica de aplicação que exija preenchimento simultâneo, sincronize os dois valores, derive um do outro, trate `VALIDADO` (processamento) como equivalente a `VALIDO` (qualidade), ou trate `RECONCILIADO` como eliminação automática de `DIVERGENTE`. Não se aplica a `unidade_economica` (`status_registro` próprio), `conflito_dado` (`status_conflito`), `resultado_calculo`/`revisao_tecnica` (`status_revisao`) — evita colisão com eixos de estado já existentes. MCD-CHANGE-REQUEST-002 (CR2-007)/MCD-001 V1.2 §10; DST-001 V1.2 §5/DST-E009/DST-E011. |
+| ADR-D017 | Registro canônico (MCD-F9007) | Coluna `registrado_em` (TIMESTAMPTZ) em `pessoa_fisica`, `pessoa_juridica`, `vinculo`, `vinculo_extremidade`, `receita`, `documento_fiscal`, `receita_documento_fiscal`, `arquivo_origem`, `documento_fiscal_arquivo_origem`, `contribuicao_previdenciaria`, `vinculo_previdenciario`, `evento_irpf`, `fonte_pagadora`, `cenario_tributario`, `conflito_dado`, `conflito_dado_item` (16 objetos). | Confirmado equivalente e **não duplicado** em `unidade_economica` (`criado_em`, MCD-F0004) e `classificacao_equiparacao_hospitalar` (`registrado_em`, MCD-F5010 — mesmo campo). **Pendente** (não decidido por inferência) em `resultado_calculo` (`calculado_em`) e `revisao_tecnica` (`revisado_em`) — ver `ADR-GAP-008`. MCD-001 V1.2 §8/§10; CDC-001 V1.2 §9. |
+| ADR-D018 | Data do fato (MCD-F9008) | Coluna `data_fato` em `receita`, `contribuicao_previdenciaria`, `evento_irpf`. | Os três fatos puros onde a data de ocorrência econômica pode divergir de `data_emissao`/`competencia`. Tipo físico proposto `DATE` por analogia às demais datas civis do schema; `TIMESTAMPTZ` não descartado se o caso de uso exigir hora — tipo exato fica aberto para a proposta de `schema.prisma`. MCD-001 V1.2 §8/§10. |
+| ADR-D019 | Evidência RAW transversal (MCD-F9009) | `APLICAR_VIA_RELACIONAMENTO_EXISTENTE`: em `documento_fiscal`, já coberto por `documento_fiscal_arquivo_origem` (COT-SUP-003) — nenhuma coluna nova. Em `receita`, `contribuicao_previdenciaria`, `evento_irpf`, nenhuma FK criada por inferência — ver `ADR-GAP-007`. | CDC-001 V1.2 §3 (`arquivo_origem_id` transversal ≠ associação específica CDC-FIS-003); MCD-001 V1.2 §9. |
 
 ## 3. Mapeamento inicial de objetos/estruturas para relações físicas
 
@@ -202,6 +272,8 @@ Testes de constraints PostgreSQL devem ser de integração contra PostgreSQL rea
 | ADR-GAP-004 | Identidade do revisor | Bloqueada por SEC-001/OBS-001; não criar usuario_id/revisor_id por inferência. |
 | ADR-GAP-005 | rule_set_id/regra_versao_id | Opacos até RGT-001; persistir como referência opaca apenas onde MCD já autoriza. |
 | ADR-GAP-006 | Retenção/anonimização LGPD | SEC-001 deve fechar política antes de automações de purge. |
+| ADR-GAP-007 | MCD-F9009 (`arquivo_origem_id`) em `receita`, `contribuicao_previdenciaria`, `evento_irpf` | Nenhum relacionamento com `arquivo_origem` autorizado por inferência para esses três objetos; só `documento_fiscal` tem cobertura via `documento_fiscal_arquivo_origem` (ADR-D019). Decisão física (nova FK ou ausência deliberada) fica para revisão explícita futura. |
+| ADR-GAP-008 | MCD-F9007 (`registrado_em`) em `resultado_calculo`/`revisao_tecnica` | Verificação semântica (Errata controlada nº2) não confirmou equivalência entre `calculado_em`/`revisado_em` e `registrado_em` — o MCD-001 V1.2 define os três com textos distintos ("momento do cálculo"/"momento da revisão" vs. "momento do registro canônico"), sem afirmar que são a mesma ocorrência temporal. Não decidido se os campos existentes substituem `registrado_em` ou se cada objeto precisa de uma coluna `registrado_em` adicional. |
 
 ## 15. Ordem de implementação após aprovação
 
@@ -225,6 +297,7 @@ Testes de constraints PostgreSQL devem ser de integração contra PostgreSQL rea
 - [ ] Separa Prisma de autoridade PostgreSQL.
 - [ ] Fixa `relationMode = "foreignKeys"` e proíbe `relationMode = "prisma"`.
 - [ ] Declara baseline `PostgreSQL >= 15` sem vincular o domínio canônico à versão.
+- [ ] Define estratégia física dos campos transversais MCD-F9001..F9010 preservando `status_processamento_dado`/`status_qualidade_dado` como eixos independentes e sem entidade polimórfica genérica de proveniência.
 - [ ] Não fecha Enum/Ref aberto.
 - [ ] Não usa UE como tenant de segurança.
 - [ ] Bloqueia auth/SEC e regras tributárias ainda não aprovadas.
