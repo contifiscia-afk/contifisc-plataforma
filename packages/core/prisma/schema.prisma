@@ -1,0 +1,611 @@
+// ============================================================================
+// schema.prisma — PRIMEIRA PROPOSTA (DRAFT, NÃO APROVADO)
+// ============================================================================
+// Baseline obrigatória: COT-001 V1.1 (corrigido por errata) / MCD-001 V1.2 /
+// CDC-001 V1.2 / DST-001 V1.2 / ADR-001 V1.0 (APROVADO — baseline física
+// autorizada para PoC) / PoC ADR-C005 VALIDADA.
+//
+// Este arquivo é uma PROPOSTA para revisão humana. NÃO houve `prisma migrate`,
+// NÃO há banco de produção configurado, e este arquivo NÃO autoriza a
+// primeira migration (ADR-001 §15/§16, MIG-007).
+//
+// Convenções aplicadas (ADR-001 §4, MCD-001 V1.2 §3-4):
+// - Nomes de campo Prisma = nomes canônicos MCD-001 V1.2 literalmente
+//   (snake_case), sem tradução para camelCase/inglês. Isso elimina a
+//   necessidade de `@map` na maioria dos campos escalares.
+// - Nomes de tabela: `@@map` para snake_case singular em português
+//   (ADR-001 §3, tabela de mapeamento inicial).
+// - PK sempre `id` (UUID / `@db.Uuid`). Estratégia de geração (aplicação vs
+//   `gen_random_uuid()`) permanece ABERTA (ADR-D004: "não misturar
+//   estratégias sem motivo") — nenhum `@default` foi adicionado aqui de
+//   propósito; isso é uma decisão para a proposta de ADR físico/migration,
+//   não para este draft.
+// - Dinheiro: `Decimal @db.Decimal(18,2)` (ADR-D006). Percentual:
+//   `Decimal @db.Decimal(7,4)` (ADR-D007, MCD-001 V1.2 §5). Nunca `Float`.
+// - Competência: `String @db.VarChar(7)` (ADR-D008, corrigido por errata de
+//   CHAR(7) para VARCHAR(7)). O CHECK de formato/mês (`YYYY-MM`, ADR-C009)
+//   NÃO é representável em Prisma — fica documentado em comentário, a ser
+//   criado como SQL manual na migration futura.
+// - Timestamps técnicos: `DateTime @db.Timestamptz` (ADR-D009). Datas civis
+//   (nascimento, abertura, vigência, emissão): `DateTime @db.Date`.
+// - Enums DST fechados (DST-001 V1.2 §4) são representados como `enum`
+//   nativo do Prisma nesta proposta, conforme instrução explícita desta
+//   etapa. ATENÇÃO — isso diverge de ADR-D010, que recomenda TEXT + CHECK em
+//   vez de ENUM nativo do PostgreSQL (para evitar as limitações de
+//   transação do `ALTER TYPE ... ADD VALUE`). Ver achado RELEVANTE no
+//   relatório desta etapa; a decisão final cabe à revisão humana do ADR.
+// - Campos `Enum/Ref` ainda ABERTOS no DST (DST-GAP-*) são `String` livre,
+//   sem lista fechada inventada, com largura não especificada pelo MCD ⇒
+//   `@db.Text` (nenhuma largura foi inventada).
+// - `relationMode = "foreignKeys"` conforme ADR-D013 (obrigatório) — a
+//   integridade referencial fica no PostgreSQL, nunca emulada no client.
+// - Metadados transversais (MCD-F9001..F9010: sistema_origem genérico,
+//   status_processamento_dado, status_qualidade_dado, correlation_id etc.)
+//   NÃO foram replicados como colunas em cada tabela nesta proposta — o
+//   próprio MCD-001 V1.2 §10 diz que a estratégia física (envelope,
+//   composição ou tabela de lineage) ainda não foi decidida. Adicioná-los
+//   agora seria inventar uma decisão física não autorizada.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider     = "postgresql"
+  url          = env("DATABASE_URL")
+  relationMode = "foreignKeys" // ADR-D013 — obrigatório. Nunca "prisma".
+}
+
+// ============================================================================
+// ENUMS — somente códigos DST-001 V1.2 §4 efetivamente FECHADOS.
+// Nenhum enum foi criado para campo em DST-GAP aberto (instrução #19/#20).
+// ============================================================================
+
+/// DST-E008 — status_registro (ciclo de vida cadastral). Fechado.
+enum StatusRegistro {
+  ATIVO
+  INATIVO
+  ARQUIVADO
+
+  @@map("status_registro")
+}
+
+/// DST-E001 — regime_tributario. Fechado.
+enum RegimeTributario {
+  SIMPLES_NACIONAL
+  LUCRO_PRESUMIDO
+  LUCRO_REAL
+  OUTRO
+  NAO_INFORMADO
+
+  @@map("regime_tributario")
+}
+
+/// DST-E012 — lado_extremidade. Fechado (resolve o antigo DST-GAP-004).
+enum LadoExtremidade {
+  ORIGEM
+  DESTINO
+
+  @@map("lado_extremidade")
+}
+
+/// DST-E003 — status_elegibilidade_equiparacao_hospitalar. Fechado.
+enum StatusElegibilidadeEquiparacaoHospitalar {
+  EH_001_ELEGIVEL
+  EH_002_NAO_ELEGIVEL
+  EH_003_PENDENTE
+  EH_004_REVISAO_TECNICA
+
+  @@map("status_elegibilidade_equiparacao_hospitalar")
+}
+
+/// DST-E004 — tipo_rendimento_irpf. Fechado.
+enum TipoRendimentoIrpf {
+  TRIBUTAVEL
+  ISENTO_NAO_TRIBUTAVEL
+  TRIBUTACAO_EXCLUSIVA
+  OUTRO
+  NAO_INFORMADO
+
+  @@map("tipo_rendimento_irpf")
+}
+
+/// DST-E005 — tipo_fonte_pagadora. Fechado.
+enum TipoFontePagadora {
+  PESSOA_FISICA
+  PESSOA_JURIDICA
+  EXTERIOR
+  OUTRA
+  NAO_INFORMADA
+
+  @@map("tipo_fonte_pagadora")
+}
+
+/// DST-E006 — status_revisao. Fechado. Reaproveitado por ResultadoCalculo e RevisaoTecnica
+/// (obrigatoriedade difere por tabela — ver MCD-F8209 "Não" vs MCD-F8704 "Sim").
+enum StatusRevisao {
+  PENDENTE
+  APROVADO
+  REJEITADO
+  AJUSTE_SOLICITADO
+
+  @@map("status_revisao")
+}
+
+/// DST-E007 — status_conflito. Fechado.
+enum StatusConflito {
+  ABERTO
+  EM_ANALISE
+  RESOLVIDO
+  DESCARTADO
+
+  @@map("status_conflito")
+}
+
+/// DST-E010 — sistema_origem. Fechado. Usado aqui apenas no campo específico
+/// ConflitoDadoItem.sistema_origem (MCD-F8654) — não é o metadado transversal
+/// genérico (MCD-F9001), que não foi replicado nesta proposta (ver cabeçalho).
+enum SistemaOrigem {
+  ERP_CONTABIL
+  DOCUMENTO_FISCAL
+  CNIS
+  FOLHA_PAGAMENTO
+  BANCO
+  INFORME_RENDIMENTOS
+  CARNE_LEAO
+  ENTRADA_MANUAL
+  API_GOVERNAMENTAL
+  OUTRO_SISTEMA
+
+  @@map("sistema_origem")
+}
+
+// ============================================================================
+// COT-OBJ-001 -> MCD-F0001..F0005 -> CDC-UE-001 -> DST-T001
+// Unidade Econômica: contexto agregador; não é sujeito tributário.
+// ============================================================================
+model UnidadeEconomica {
+  id              String         @id @db.Uuid
+  nome            String         @db.VarChar(160)
+  status_registro StatusRegistro
+  criado_em       DateTime       @db.Timestamptz
+  atualizado_em   DateTime       @db.Timestamptz
+
+  vinculo_extremidades VinculoExtremidade[]
+  cenarios_tributarios CenarioTributario[]
+
+  @@map("unidade_economica")
+}
+
+// ============================================================================
+// COT-OBJ-002 -> MCD-F1001..F1008 -> CDC-PER-001 -> DST-T002
+// Pessoa Física: identidade tributária. Não é identidade de autenticação.
+// ============================================================================
+model PessoaFisica {
+  id                       String    @id @db.Uuid
+  cpf                      String?   @db.VarChar(11)
+  nome                     String    @db.VarChar(200)
+  data_nascimento          DateTime? @db.Date
+  /// DST-GAP-001 — Enum/Ref aberto; catálogo profissional ainda não aprovado. Não inventar lista fechada.
+  conselho_profissional    String?   @db.Text
+  registro_profissional    String?   @db.VarChar(30)
+  uf_registro_profissional String?   @db.VarChar(2)
+  /// DST-GAP-002 — Enum/Ref aberto; catálogo de especialidades ainda não aprovado. Não inventar lista fechada.
+  especialidade_saude      String?   @db.Text
+
+  vinculo_extremidades          VinculoExtremidade[]
+  receitas                      Receita[]
+  contribuicoes_previdenciarias ContribuicaoPrevidenciaria[]
+  vinculos_previdenciarios      VinculoPrevidenciario[]
+  eventos_irpf                  EventoIRPF[]
+
+  @@map("pessoa_fisica")
+}
+
+// ============================================================================
+// COT-OBJ-003 -> MCD-F2001..F2007 -> CDC-EMP-001 -> DST-T003
+// Pessoa Jurídica: identidade tributária PJ. CNPJ não é PK interna.
+// ============================================================================
+model PessoaJuridica {
+  id                String            @id @db.Uuid
+  cnpj              String?           @db.VarChar(14)
+  razao_social      String?           @db.VarChar(200)
+  regime_tributario RegimeTributario?
+  cnae_principal    String?           @db.VarChar(7)
+  data_abertura     DateTime?         @db.Date
+  municipio_ibge    String?           @db.VarChar(7)
+
+  vinculo_extremidades VinculoExtremidade[]
+  receitas             Receita[]
+
+  @@map("pessoa_juridica")
+}
+
+// ============================================================================
+// COT-OBJ-004 -> MCD-F2501..F2505,F2510 -> CDC-REL-001 -> DST-T004
+// Vínculo: relação de primeira classe. Endpoints NÃO ficam aqui — ver
+// VinculoExtremidade (COT-SUP-001). MCD-F2506..F2509 (V1.1, polimórficos)
+// foram REMOVIDOS pelo CR-002/MCD-001 V1.2.
+// ============================================================================
+model Vinculo {
+  id                                 String    @id @db.Uuid
+  /// DST-GAP-003 — Enum/Ref aberto (catálogo de tipo_vinculo ainda não fechado). Obrigatório (MCD-F2502).
+  tipo_vinculo                       String    @db.Text
+  percentual_participacao_societaria Decimal?  @db.Decimal(7, 4)
+  vigencia_inicio                    DateTime? @db.Date
+  vigencia_fim                       DateTime? @db.Date
+  /// DST-GAP-005 — Enum/Ref aberto (catálogo de papel_vinculo ainda não fechado).
+  papel_vinculo                      String?   @db.Text
+
+  /// ADR-C005 / COT-REL-NORM-001 (COT-001 V1.1 §5): todo Vinculo deve ter
+  /// EXATAMENTE duas VinculoExtremidade (1 ORIGEM + 1 DESTINO). Prisma NÃO
+  /// representa essa cardinalidade exata — o relacionamento aqui é 1:N
+  /// estrutural; a garantia de "exatamente duas" é feita por
+  /// CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED, validada pela PoC
+  /// (poc/adr-001-vinculo-extremidade/). A trigger/função NÃO está neste
+  /// arquivo — é SQL manual a ser adicionado na migration futura.
+  extremidades VinculoExtremidade[]
+
+  @@map("vinculo")
+}
+
+// ============================================================================
+// COT-SUP-001 -> MCD-F2520..F2525 -> CDC-REL-002 -> DST-T005
+// Estrutura de suporte relacional (NÃO é objeto tributário de negócio).
+// Materializa ORIGEM/DESTINO de Vinculo com FK real para UE, PF ou PJ.
+// ============================================================================
+model VinculoExtremidade {
+  id                   String          @id @db.Uuid
+  vinculo_id           String          @db.Uuid
+  /// ADR-C004 — DST-E012, enum fechado ORIGEM/DESTINO.
+  lado_extremidade     LadoExtremidade
+  unidade_economica_id String?         @db.Uuid
+  pessoa_fisica_id     String?         @db.Uuid
+  pessoa_juridica_id   String?         @db.Uuid
+
+  vinculo           Vinculo           @relation(fields: [vinculo_id], references: [id], onDelete: Restrict)
+  unidade_economica UnidadeEconomica? @relation(fields: [unidade_economica_id], references: [id], onDelete: Restrict)
+  pessoa_fisica     PessoaFisica?     @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
+  pessoa_juridica   PessoaJuridica?   @relation(fields: [pessoa_juridica_id], references: [id], onDelete: Restrict)
+
+  /// ADR-C003 — máximo uma ORIGEM e uma DESTINO por vínculo.
+  @@unique([vinculo_id, lado_extremidade], map: "uq_vinculo_lado")
+  /// ADR-C002 — endpoint XOR (exatamente uma FK entre UE/PF/PJ). NÃO
+  /// representável em Prisma; CHECK PostgreSQL obrigatório na migration
+  /// futura: ((unidade_economica_id IS NOT NULL)::int +
+  /// (pessoa_fisica_id IS NOT NULL)::int + (pessoa_juridica_id IS NOT NULL)::int) = 1
+  /// ADR-C005 / COT-REL-NORM-001 — CONSTRAINT TRIGGER DEFERRABLE INITIALLY
+  /// DEFERRED obrigatória na migration futura, validada pela PoC.
+  @@map("vinculo_extremidade")
+}
+
+// ============================================================================
+// COT-OBJ-005 -> MCD-F3001..F3005,F3007,F3008,F3010,F3011 -> CDC-REC-001 -> DST-T006
+// Receita: fato canônico. MCD-F3006 (tipo_titular) e MCD-F3009 (titular_id,
+// polimórfico) foram REMOVIDOS pelo CR-002/MCD-001 V1.2 — titularidade agora
+// é FK real com XOR.
+// ============================================================================
+model Receita {
+  id                  String    @id @db.Uuid
+  valor_receita_bruta Decimal?  @db.Decimal(18, 2)
+  data_emissao        DateTime? @db.Date
+  /// Competência YYYY-MM. CHECK de formato/mês (ADR-C009) NÃO representável
+  /// em Prisma — obrigatório como SQL manual na migration futura. Nunca
+  /// converter para DATE com dia fictício.
+  competencia         String?   @db.VarChar(7)
+  /// DST-GAP-006 — Enum/Ref aberto (catálogo de fonte_receita ainda não fechado).
+  fonte_receita       String?   @db.Text
+  fonte_pagadora_id   String?   @db.Uuid
+  valor_retencoes     Decimal?  @db.Decimal(18, 2)
+  /// ADR-C001 — CHECK PostgreSQL obrigatório na migration: exatamente um dos
+  /// owners PF/PJ deve estar preenchido (pessoa_fisica_id XOR pessoa_juridica_id).
+  /// NÃO representável apenas pela tipagem Prisma.
+  pessoa_fisica_id    String?   @db.Uuid
+  pessoa_juridica_id  String?   @db.Uuid
+
+  fonte_pagadora  FontePagadora?  @relation(fields: [fonte_pagadora_id], references: [id], onDelete: Restrict)
+  pessoa_fisica   PessoaFisica?   @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
+  pessoa_juridica PessoaJuridica? @relation(fields: [pessoa_juridica_id], references: [id], onDelete: Restrict)
+
+  documentos_fiscais   ReceitaDocumentoFiscal[]
+  classificacoes_eqhop ClassificacaoEquiparacaoHospitalar[]
+
+  @@index([competencia])
+  @@map("receita")
+}
+
+// ============================================================================
+// COT-OBJ-006 -> MCD-F4001..F4007 -> CDC-FIS-001 -> DST-T007
+// Documento Fiscal: evidência/documento normalizado. MCD-F4008
+// (arquivo_origem_id único) foi REMOVIDO — ver DocumentoFiscalArquivoOrigem (N:N).
+// ============================================================================
+model DocumentoFiscal {
+  id                       String   @id @db.Uuid
+  /// DST-GAP-007 — Enum/Ref aberto (catálogo de tipo_documento_fiscal ainda não fechado). Obrigatório.
+  tipo_documento_fiscal    String   @db.Text
+  numero_documento_fiscal  String?  @db.VarChar(60)
+  chave_documento_fiscal   String?  @db.VarChar(80)
+  codigo_servico_fiscal    String?  @db.VarChar(30)
+  descricao_servico_fiscal String?  @db.Text
+  valor_documento_fiscal   Decimal? @db.Decimal(18, 2)
+
+  receitas ReceitaDocumentoFiscal[]
+  arquivos DocumentoFiscalArquivoOrigem[]
+
+  @@index([chave_documento_fiscal])
+  @@map("documento_fiscal")
+}
+
+// ============================================================================
+// COT-SUP-002 -> MCD-F4301..F4303 -> CDC-FIS-002 -> DST-T009
+// Estrutura de suporte (N:N explícita) — NÃO é objeto tributário autônomo.
+// ============================================================================
+model ReceitaDocumentoFiscal {
+  id                  String @id @db.Uuid
+  receita_id          String @db.Uuid
+  documento_fiscal_id String @db.Uuid
+
+  receita          Receita         @relation(fields: [receita_id], references: [id], onDelete: Cascade)
+  documento_fiscal DocumentoFiscal @relation(fields: [documento_fiscal_id], references: [id], onDelete: Cascade)
+
+  /// ADR-C006 — evita associação duplicada. Cascade aqui remove só a
+  /// LINHA DE ASSOCIAÇÃO, nunca a Receita ou o DocumentoFiscal (ADR §8:
+  /// "Associações N:N: Cascade somente da associação, não do objeto de destino").
+  @@unique([receita_id, documento_fiscal_id], map: "uq_receita_documento_fiscal")
+  @@map("receita_documento_fiscal")
+}
+
+// ============================================================================
+// COT-OBJ-007 -> MCD-F8401..F8405 -> CDC-ARQ-001 -> DST-T008
+// Arquivo de Origem: evidência RAW imutável.
+// ============================================================================
+model ArquivoOrigem {
+  id                       String  @id @db.Uuid
+  nome_arquivo             String? @db.VarChar(255)
+  hash_conteudo            String  @db.VarChar(128)
+  tipo_mime                String? @db.VarChar(120)
+  armazenamento_referencia String  @db.VarChar(500)
+
+  documentos_fiscais DocumentoFiscalArquivoOrigem[]
+
+  @@map("arquivo_origem")
+}
+
+// ============================================================================
+// COT-SUP-003 -> MCD-F4401..F4404 -> CDC-FIS-003 -> DST-T010
+// Estrutura de suporte (N:N explícita) — NÃO é objeto tributário autônomo.
+// ============================================================================
+model DocumentoFiscalArquivoOrigem {
+  id                  String  @id @db.Uuid
+  documento_fiscal_id String  @db.Uuid
+  arquivo_origem_id   String  @db.Uuid
+  /// DST-GAP-011 — Enum/Ref aberto. Não inventar enum fechado enquanto o gap estiver aberto.
+  papel_arquivo       String? @db.Text
+
+  documento_fiscal DocumentoFiscal @relation(fields: [documento_fiscal_id], references: [id], onDelete: Cascade)
+  arquivo_origem   ArquivoOrigem   @relation(fields: [arquivo_origem_id], references: [id], onDelete: Restrict)
+
+  /// ADR-C007 — unicidade mínima (documento_fiscal_id, arquivo_origem_id);
+  /// revisar quando papel_arquivo (DST-GAP-011) fechar. Cascade do lado
+  /// documento_fiscal remove só a associação; arquivo_origem usa Restrict
+  /// porque é evidência RAW (ADR §8: nunca cascade sobre evidência).
+  @@unique([documento_fiscal_id, arquivo_origem_id], map: "uq_documento_fiscal_arquivo_origem")
+  @@map("documento_fiscal_arquivo_origem")
+}
+
+// ============================================================================
+// COT-OBJ-008 -> MCD-F5001..F5011 -> CDC-EH-001 -> DST-T011
+// Classificação de Equiparação Hospitalar: resultado derivado versionado.
+// Identidade própria (MCD-F5009, nova na V1.2) e histórico (F5010/F5011).
+// Nenhuma lógica tributária executável aqui — critérios jurídicos pertencem ao RGT-001.
+// ============================================================================
+model ClassificacaoEquiparacaoHospitalar {
+  id                                          String                                    @id @db.Uuid
+  status_elegibilidade_equiparacao_hospitalar StatusElegibilidadeEquiparacaoHospitalar?
+  percentual_receita_elegivel                 Decimal?                                  @db.Decimal(7, 4)
+  valor_receita_elegivel                      Decimal?                                  @db.Decimal(18, 2)
+  valor_receita_nao_elegivel                  Decimal?                                  @db.Decimal(18, 2)
+  percentual_confianca_classificacao          Decimal?                                  @db.Decimal(7, 4)
+  eh_validada_tecnicamente                    Boolean?
+  receita_id                                  String                                    @db.Uuid
+  /// Opaco até RGT-001 (MCD §14/ADR-GAP-005). Não é FK — nenhum modelo de regra existe ainda.
+  regra_versao_id                             String?                                   @db.VarChar(120)
+  registrado_em                               DateTime                                  @db.Timestamptz
+  atualizado_em                               DateTime?                                 @db.Timestamptz
+
+  receita Receita @relation(fields: [receita_id], references: [id], onDelete: Restrict)
+
+  @@map("classificacao_equiparacao_hospitalar")
+}
+
+// ============================================================================
+// COT-OBJ-009 -> MCD-F6001..F6007 -> CDC-PRE-001 -> DST-T012
+// Contribuição Previdenciária: fato previdenciário por PF/vínculo/competência.
+// ============================================================================
+model ContribuicaoPrevidenciaria {
+  id                         String   @id @db.Uuid
+  valor_inss_recolhido       Decimal? @db.Decimal(18, 2)
+  valor_salario_contribuicao Decimal? @db.Decimal(18, 2)
+  valor_teto_previdenciario  Decimal? @db.Decimal(18, 2)
+  valor_excedente_inss       Decimal? @db.Decimal(18, 2)
+  vinculo_previdenciario_id  String?  @db.Uuid
+  pessoa_fisica_id           String   @db.Uuid
+
+  vinculo_previdenciario VinculoPrevidenciario? @relation(fields: [vinculo_previdenciario_id], references: [id], onDelete: Restrict)
+  pessoa_fisica          PessoaFisica           @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
+
+  @@map("contribuicao_previdenciaria")
+}
+
+// ============================================================================
+// COT-OBJ-010 -> MCD-F6101..F6105 -> CDC-PREV-001 -> DST-T013
+// Vínculo Previdenciário: fonte/vínculo previdenciário de uma PF com vigência.
+// ============================================================================
+model VinculoPrevidenciario {
+  id                          String    @id @db.Uuid
+  pessoa_fisica_id            String    @db.Uuid
+  /// DST-GAP-008 — Enum/Ref aberto (catálogo previdenciário ainda não fechado). Obrigatório.
+  tipo_vinculo_previdenciario String    @db.Text
+  vigencia_inicio             DateTime? @db.Date
+  vigencia_fim                DateTime? @db.Date
+
+  pessoa_fisica PessoaFisica @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
+
+  contribuicoes ContribuicaoPrevidenciaria[]
+
+  @@map("vinculo_previdenciario")
+}
+
+// ============================================================================
+// COT-OBJ-011 -> MCD-F7001..F7010 -> CDC-IRP-001 -> DST-T014
+// Evento IRPF/Carnê-Leão: fato relevante ao IRPF, independente de existir PJ.
+// ============================================================================
+model EventoIRPF {
+  id                          String              @id @db.Uuid
+  tipo_rendimento_irpf        TipoRendimentoIrpf?
+  valor_rendimento_tributavel Decimal?            @db.Decimal(18, 2)
+  valor_rendimento_isento     Decimal?            @db.Decimal(18, 2)
+  valor_deducao_irpf          Decimal?            @db.Decimal(18, 2)
+  valor_livro_caixa           Decimal?            @db.Decimal(18, 2)
+  valor_irpf_retido           Decimal?            @db.Decimal(18, 2)
+  valor_irpf_projetado        Decimal?            @db.Decimal(18, 2)
+  pessoa_fisica_id            String              @db.Uuid
+  fonte_pagadora_id           String?             @db.Uuid
+
+  pessoa_fisica  PessoaFisica   @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
+  fonte_pagadora FontePagadora? @relation(fields: [fonte_pagadora_id], references: [id], onDelete: Restrict)
+
+  @@map("evento_irpf")
+}
+
+// ============================================================================
+// COT-OBJ-012 -> MCD-F7201..F7204 -> CDC-FPG-001 -> DST-T015
+// Fonte Pagadora: origem pagadora de Receita/rendimento.
+// ============================================================================
+model FontePagadora {
+  id                   String            @id @db.Uuid
+  tipo_fonte_pagadora  TipoFontePagadora
+  /// GAP-CDC-1.2-004 / GAP-MCD-CR2-005 — tipagem CPF/CNPJ/Exterior ainda em
+  /// aberto (gap de modelagem/validação MCD/CDC, não é gap semântico DST).
+  /// Não inventar union fechada aqui.
+  identificador_fiscal String?           @db.VarChar(20)
+  nome                 String?           @db.VarChar(200)
+
+  receitas     Receita[]
+  eventos_irpf EventoIRPF[]
+
+  @@map("fonte_pagadora")
+}
+
+// ============================================================================
+// COT-OBJ-013 -> MCD-F8001..F8005 -> CDC-PLN-001 -> DST-T016
+// Cenário Tributário: simulação isolada dos fatos oficiais.
+// ============================================================================
+model CenarioTributario {
+  id                                  String   @id @db.Uuid
+  nome                                String   @db.VarChar(120)
+  valor_carga_tributaria_projetada    Decimal? @db.Decimal(18, 2)
+  valor_economia_tributaria_projetada Decimal? @db.Decimal(18, 2)
+  unidade_economica_id                String   @db.Uuid
+
+  unidade_economica UnidadeEconomica @relation(fields: [unidade_economica_id], references: [id], onDelete: Restrict)
+
+  resultados_calculo ResultadoCalculo[]
+
+  @@map("cenario_tributario")
+}
+
+// ============================================================================
+// COT-OBJ-014 -> MCD-F8201..F8209 -> CDC-CAL-001 -> DST-T017
+// Resultado de Cálculo: resultado reproduzível (snapshot/engine/regras).
+// ============================================================================
+model ResultadoCalculo {
+  id                    String         @id @db.Uuid
+  cenario_tributario_id String?        @db.Uuid
+  input_snapshot_hash   String         @db.VarChar(128)
+  engine_id             String         @db.VarChar(80)
+  engine_version        String         @db.VarChar(20)
+  /// Opaco até RGT-001 (ADR-GAP-005). Não é FK — nenhum modelo de regra existe ainda.
+  rule_set_id           String         @db.VarChar(80)
+  rule_set_version      String         @db.VarChar(20)
+  calculado_em          DateTime       @db.Timestamptz
+  status_revisao        StatusRevisao?
+
+  /// ADR §8: "Cenários: possível cascade interno do cenário após política
+  /// explícita" — Cascade aplicado aqui como leitura dessa frase (resultado é
+  /// dado derivado do cenário, não fato oficial independente). Sinalizado
+  /// como decisão a confirmar no relatório desta etapa (a frase do ADR não é
+  /// uma decisão fechada, "após política explícita").
+  cenario_tributario CenarioTributario? @relation(fields: [cenario_tributario_id], references: [id], onDelete: Cascade)
+
+  @@map("resultado_calculo")
+}
+
+// ============================================================================
+// COT-OBJ-015 -> MCD-F8601..F8604 -> CDC-CFD-001 -> DST-T018
+// Conflito de Dados: divergência auditável entre fontes/fatos candidatos.
+// ============================================================================
+model ConflitoDado {
+  id              String         @id @db.Uuid
+  status_conflito StatusConflito
+  /// DST-GAP-009 — Enum/Ref aberto (catálogo de tipo_conflito ainda não fechado). Obrigatório.
+  tipo_conflito   String         @db.Text
+  descricao       String?        @db.Text
+
+  itens ConflitoDadoItem[]
+
+  @@map("conflito_dado")
+}
+
+// ============================================================================
+// COT-SUP-004 -> MCD-F8650..F8657 -> CDC-CFD-002 -> DST-T019
+// Estrutura de suporte de auditoria — NÃO é objeto tributário de negócio.
+// `objeto_id`/`tipo_objeto` são a EXCEÇÃO POLIMÓRFICA CONTROLADA prevista
+// pelo MCD/CDC/COT, restrita ao domínio de auditoria/reconciliação.
+// NÃO criar FK genérica (é impossível fisicamente) e NÃO reutilizar esse
+// padrão em objetos financeiros (Receita, Vinculo, etc. usam FK real + XOR).
+// ============================================================================
+model ConflitoDadoItem {
+  id                   String         @id @db.Uuid
+  conflito_dado_id     String         @db.Uuid
+  /// DST-GAP-012 — Enum/Ref aberto, restrito ao domínio de auditoria. Obrigatório.
+  tipo_objeto          String         @db.Text
+  /// Exceção polimórfica controlada (sem FK): pode referenciar qualquer objeto
+  /// canônico conforme `tipo_objeto`. Validação fica no serviço de domínio/auditoria.
+  objeto_id            String?        @db.Uuid
+  sistema_origem       SistemaOrigem?
+  identificador_origem String?        @db.VarChar(120)
+  /// DST-GAP-013 — Enum/Ref aberto.
+  papel_no_conflito    String?        @db.Text
+  valor_hash           String?        @db.VarChar(128)
+
+  conflito_dado ConflitoDado @relation(fields: [conflito_dado_id], references: [id], onDelete: Cascade)
+
+  @@index([objeto_id])
+  @@index([sistema_origem, identificador_origem])
+  @@map("conflito_dado_item")
+}
+
+// ============================================================================
+// COT-OBJ-016 -> MCD-F8701..F8706 -> CDC-REV-001 -> DST-T020
+// Revisão Técnica: decisão humana auditável. `objeto_revisado_id` segue a
+// MESMA exceção polimórfica controlada de ConflitoDadoItem (MCD/CDC/COT
+// referenciam Revisão a partir de múltiplos objetos — EqHop, ConflitoDado
+// etc. — sem um FK único possível). Identidade/autorização do revisor
+// permanece BLOQUEADA até SEC-001/OBS-001 (ADR-GAP-004) — nenhum
+// usuario_id/revisor_id foi criado por inferência.
+// ============================================================================
+model RevisaoTecnica {
+  id                   String        @id @db.Uuid
+  /// Exceção polimórfica controlada (sem FK) — mesmo padrão de ConflitoDadoItem.
+  objeto_revisado_id   String        @db.Uuid
+  /// DST-GAP-010 — Enum/Ref aberto. Obrigatório.
+  tipo_objeto_revisado String        @db.Text
+  status_revisao       StatusRevisao
+  justificativa        String?       @db.Text
+  revisado_em          DateTime      @db.Timestamptz
+
+  @@index([objeto_revisado_id])
+  @@map("revisao_tecnica")
+}

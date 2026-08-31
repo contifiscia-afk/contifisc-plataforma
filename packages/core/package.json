@@ -2,5 +2,17 @@
   "name": "@contifisc/core",
   "version": "0.1.0",
   "private": true,
-  "description": "Reservado para o schema físico (Prisma) do MCD. Sem persistência nesta Fase 1."
+  "type": "module",
+  "description": "Primeira proposta de schema.prisma canonico (draft, sem migration) do MCD-001 V1.2 / CDC-001 V1.2 / COT-001 V1.1 / ADR-001 V1.0.",
+  "scripts": {
+    "prisma:format": "prisma format",
+    "prisma:validate": "prisma validate",
+    "prisma:generate": "prisma generate"
+  },
+  "devDependencies": {
+    "prisma": "^6.19.3"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3"
+  }
 }
