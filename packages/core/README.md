@@ -2,13 +2,13 @@
 
 Reservado para o schema físico (Prisma) do Modelo Canônico de Dados.
 
-**Sem Prisma, sem migration nesta fase.** MCD-001 V1.2, CDC-001 V1.2, DST-001 V1.2, COT-001 V1.1
-e agora `docs/ADR-001_CONTIFISC_Schema_Fisico_PostgreSQL_Prisma_V1.0.md` são a baseline aprovada.
-O ADR-001 está com status **APROVADO — baseline física autorizada para PoC; schema e migrations
-ainda não autorizados** (publicação corrigida por errata). Isso autoriza a PoC da constraint
-diferida de `VinculoExtremidade` (ADR §5.1/§15 passo 2), mas **não** autoriza criar
-`schema.prisma` ou qualquer migration — isso continua dependente de aprovação explícita
-posterior (ADR §15 passos 3+). Ver revisão técnica na seção abaixo.
+**Prisma schema canônico existente; migration ainda controlada por gate de revisão.**
+`prisma/schema.prisma` (v3, com a Errata controlada nº2 do ADR-001 incorporada) é a baseline
+física vigente para a próxima etapa. MCD-001 V1.2, CDC-001 V1.2, DST-001 V1.2, COT-001 V1.1 e
+`docs/ADR-001_CONTIFISC_Schema_Fisico_PostgreSQL_Prisma_V1.0.md` (com todas as erratas vigentes)
+continuam a baseline aprovada. A primeira migration canônica foi gerada como artefato de revisão
+(`prisma/migrations/`) — **nenhuma migration foi ou será aplicada a nenhum banco sem autorização
+explícita** posterior. Ver revisão técnica na seção abaixo.
 
 MCD-001 V1.1, CDC-001 V1.1, DST-001 V1.1 e COT-001 V1.0 são `SUPERSEDED` — preservados em
 `docs/legacy/` apenas para histórico, e não orientam código novo.
