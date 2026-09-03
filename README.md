@@ -24,12 +24,13 @@ tests/               Testes de infraestrutura (Vitest)
 ## Fontes de verdade vigentes
 
 - `docs/CAF-001_CONTIFISC_Architecture_Framework_V1.md`
-- `docs/MCD-001_CONTIFISC_Modelo_Canonico_de_Dados_V1.3.md` (145 campos canônicos — incorpora
-  `SEC-CHANGE-REQUEST-001` V1.1; sincronizado com CDC/DST V1.3)
-- `docs/CDC-001_CONTIFISC_Contrato_Canonico_de_Dados_V1.3.md` (25 contratos canônicos — sincronizado
-  com COT-001 V1.2/MCD-001 V1.3/DST-001 V1.3; ver `SEC-CR-001_RASTREABILIDADE_CDC_V1.0.md`;
-  1 inconsistência não-bloqueante registrada em `GAP-CDC-1.3-003`, pendente de reconciliação
-  cruzada antes do `ADR-002`)
+- `docs/MCD-001_CONTIFISC_Modelo_Canonico_de_Dados_V1.4.md` (151 campos canônicos — corrige os 2
+  achados `RELEVANTE` de `SEC-CR-001_RECONCILIACAO_CRUZADA_CANONICA_V1.0.md`: representação MCD
+  mínima de `ContaAcesso`/`ContaAcessoTenant`/`ContaAcessoUnidadeEconomica` e política de
+  mutabilidade de `MCD-F10004`; ver `SEC-CR-001_CORRECAO_MCD_CDC_V1.0.md`)
+- `docs/CDC-001_CONTIFISC_Contrato_Canonico_de_Dados_V1.4.md` (26 contratos canônicos — correção
+  coordenada com MCD-001 V1.4; ver `SEC-CR-001_CORRECAO_MCD_CDC_V1.0.md`; pendente de
+  reconciliação final antes do `ADR-002`)
 - `docs/DST-001_CONTIFISC_Dicionario_Semantico_Tributario_V1.3.md` (37 termos, 12 enums fechados,
   15 gaps abertos — incorpora semântica de `Tenant`/`EventoAuditoriaSeguranca`/`tenant_id`/
   `unidade_economica_id`/`papel`; sincronizado com CDC V1.3)
@@ -49,8 +50,9 @@ tests/               Testes de infraestrutura (Vitest)
   técnica em `packages/core/README.md`. Cobre exclusivamente o domínio tributário — a baseline
   física de segurança/tenant aguarda um `ADR-002` próprio.)
 
-As versões V1.0 de MCD/CDC/DST/COT, as versões V1.1 de MCD/CDC/DST/COT e as versões V1.2 de
-MCD/DST/CDC em `docs/legacy/` são `SUPERSEDED` e não devem orientar código novo.
+As versões V1.0 de MCD/CDC/DST/COT, as versões V1.1 de MCD/CDC/DST/COT, as versões V1.2 de
+MCD/DST/CDC e as versões V1.3 de MCD/CDC em `docs/legacy/` são `SUPERSEDED` e não devem orientar
+código novo.
 
 ## Interfaces canônicas implementadas
 
