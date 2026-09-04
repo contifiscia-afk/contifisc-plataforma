@@ -29,11 +29,11 @@ tests/               Testes de infraestrutura (Vitest)
   mínima de `ContaAcesso`/`ContaAcessoTenant`/`ContaAcessoUnidadeEconomica` e política de
   mutabilidade de `MCD-F10004`; ver `SEC-CR-001_CORRECAO_MCD_CDC_V1.0.md`)
 - `docs/CDC-001_CONTIFISC_Contrato_Canonico_de_Dados_V1.4.md` (26 contratos canônicos — correção
-  coordenada com MCD-001 V1.4; ver `SEC-CR-001_CORRECAO_MCD_CDC_V1.0.md`; pendente de
-  reconciliação final antes do `ADR-002`)
+  coordenada com MCD-001 V1.4; reconciliação final aprovada, ver
+  `SEC-CR-001_RECONCILIACAO_FINAL_V1.0.md`: `BASELINE CANÔNICA PÓS-SEC RECONCILIADA — APTA PARA ADR`)
 - `docs/DST-001_CONTIFISC_Dicionario_Semantico_Tributario_V1.3.md` (37 termos, 12 enums fechados,
   15 gaps abertos — incorpora semântica de `Tenant`/`EventoAuditoriaSeguranca`/`tenant_id`/
-  `unidade_economica_id`/`papel`; sincronizado com CDC V1.3)
+  `unidade_economica_id`/`papel`; sincronizado com CDC V1.4)
 - `docs/COT-001_CONTIFISC_Catalogo_Oficial_de_Objetos_Tributarios_V1.2.md` (20 objetos `COT-OBJ-*`,
   6 estruturas de suporte relacional `COT-SUP-001..006` — inclui `Tenant`,
   `EventoAuditoriaSeguranca`, `ContaAcessoTenant`, `ContaAcessoUnidadeEconomica`, aprovados via
@@ -44,13 +44,15 @@ tests/               Testes de infraestrutura (Vitest)
 - `docs/SEC-001_SEGURANCA_IDENTIDADE_AUTORIZACAO_E_ISOLAMENTO_DE_TENANT_V1.0.md` (status:
   **APROVADO** — baseline normativa de segurança/tenant)
 - `docs/SEC-CHANGE-REQUEST-001_V1.1.md` (status: **APROVADO** — incorporado ao COT-001 V1.2, ao
-  MCD-001 V1.3, ao DST-001 V1.3 e ao CDC-001 V1.3; ADR de segurança ainda pendente)
-- `docs/ADR-001_CONTIFISC_Schema_Fisico_PostgreSQL_Prisma_V1.0.md` (status: **APROVADO —
-  baseline física autorizada para PoC; schema e migrations ainda não autorizados**; ver revisão
-  técnica em `packages/core/README.md`. Cobre exclusivamente o domínio tributário — a baseline
-  física de segurança/tenant aguarda um `ADR-002` próprio.)
+  MCD-001 V1.4, ao DST-001 V1.3, ao CDC-001 V1.4 e ao ADR-001 V1.1)
+- `docs/ADR-001_CONTIFISC_Schema_Fisico_PostgreSQL_Prisma_V1.1.md` (status: **APROVADO —
+  revisão pós-SEC; define a representação física de Tenant/ContaAcesso/associações de acesso/
+  EventoAuditoriaSeguranca e a matriz RLS conceitual (25 tabelas); schema.prisma, migration, RLS
+  e autenticação ainda não implementados**; gate `ADR-001 PÓS-SEC CONSOLIDADO — APTO PARA
+  ATUALIZAÇÃO DO SCHEMA PRISMA`; ver `ADR-001_RASTREABILIDADE_POS_SEC_V1.0.md` e revisão técnica
+  em `packages/core/README.md`.)
 
-As versões V1.0 de MCD/CDC/DST/COT, as versões V1.1 de MCD/CDC/DST/COT, as versões V1.2 de
+As versões V1.0 de MCD/CDC/DST/COT/ADR-001, as versões V1.1 de MCD/CDC/DST/COT, as versões V1.2 de
 MCD/DST/CDC e as versões V1.3 de MCD/CDC em `docs/legacy/` são `SUPERSEDED` e não devem orientar
 código novo.
 
