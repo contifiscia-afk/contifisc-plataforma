@@ -102,6 +102,67 @@
 //   `contribuicao_previdenciaria`, `evento_irpf`: sem FK, `ADR-GAP-007`
 //   permanece aberto; não resolvido por inferência.
 // ============================================================================
+//
+// ============================================================================
+// Atualizacao desta versao -- Revisao pos-SEC (ADR-001 V1.1)
+// Baseline obrigatoria: SEC-001 V1.0 / SEC-CHANGE-REQUEST-001 V1.1 /
+// COT-001 V1.2 / MCD-001 V1.4 / DST-001 V1.3 / CDC-001 V1.4 /
+// SEC-CR-001_RECONCILIACAO_FINAL_V1.0.md / ADR-001 V1.1 (APROVADO --
+// baseline fisica pos-SEC). Ver
+// packages/core/prisma/SCHEMA_POS_SEC_RECONCILIATION_REPORT.md para a
+// reconciliacao completa. NAO gera migration, NAO aplica banco, NAO cria
+// RLS, NAO implementa autenticacao.
+//
+// 20 models pre-SEC preservados sem nenhuma renomeacao/remocao. 5 novos
+// models do dominio DOM-SEC (25 no total):
+// - Tenant (COT-OBJ-019/MCD-F10001/CDC-SEC-001/DST-T031): apenas `id`.
+// - EventoAuditoriaSeguranca (COT-OBJ-020/MCD-F10006/CDC-SEC-002/DST-T032):
+//   apenas `id`.
+// - ContaAcesso (COT-OBJ-017/MCD-F10007/CDC-SEC-005/DST-T021): apenas `id`
+//   -- NENHUM campo de autenticacao (sem email/senha/hash/OAuth/MFA/token/
+//   sessao/Auth.js).
+// - ContaAcessoTenant (COT-SUP-005/MCD-F10005,F10008,F10009,F10010/
+//   CDC-SEC-003/DST-T036): id, conta_acesso_id, tenant_id, papel.
+// - ContaAcessoUnidadeEconomica (COT-SUP-006/MCD-F10005,F10008,F10011,
+//   F10012/CDC-SEC-004/DST-T037): id, conta_acesso_id, unidade_economica_id,
+//   papel.
+// `CredencialAcesso`, `Sessao`, `PapelAcesso`, `Permissao`: NENHUM model --
+// permanecem diferidos/nao-canonicos, conforme SEC-CHANGE-REQUEST-001 V1.1.
+//
+// Campos adicionados aos models pre-SEC (ADR-001 V1.1 par.2.2/par.4):
+// - `UnidadeEconomica.tenant_id` (MCD-F10002, ADR-D021): NOT NULL, FK para
+//   Tenant, RESTRICT. `@@unique([id, tenant_id])` (ADR-C011) -- chave
+//   candidata para uma eventual FK composta futura, nao usada por nenhuma
+//   tabela nesta revisao (ver justificativa no model abaixo e ADR-001 par.4).
+// - `unidade_economica_id` (MCD-F10004, ADR-D022) em `Receita`,
+//   `ContribuicaoPrevidenciaria`, `VinculoPrevidenciario`, `EventoIRPF`,
+//   `DocumentoFiscal`, `ResultadoCalculo`: NOT NULL, FK SIMPLES (nao
+//   composta) para UnidadeEconomica, RESTRICT. Mutabilidade: `Versionado`
+//   nos 5 primeiros, `Imutavel` em `ResultadoCalculo` (ADR-001 V1.1 par.13)
+//   -- ver comentario em cada campo.
+// - `tenant_id` (MCD-F10003, ADR-D023) em `ArquivoOrigem`, `ConflitoDado`,
+//   `RevisaoTecnica`: NOT NULL, FK simples para Tenant, RESTRICT. Nunca
+//   populado por payload de API -- deve vir do contexto de sessao
+//   autenticado (aplicacao, fora do escopo deste schema).
+// `ConflitoDadoItem` (MCD-F8651) e `Vinculo`/`VinculoExtremidade`/
+// `PessoaFisica`/`PessoaJuridica`/`FontePagadora`/`CenarioTributario`/
+// `ReceitaDocumentoFiscal`/`DocumentoFiscalArquivoOrigem`/
+// `ClassificacaoEquiparacaoHospitalar`: NENHUMA alteracao -- tenant deriva
+// por join/RLS (ADR-001 V1.1 par.9.1), nunca por coluna propria; PF/PJ/
+// FontePagadora permanecem identidades globais sem tenant_id.
+//
+// ADR-C014 (invariante: toda linha de ContaAcessoUnidadeEconomica deve
+// corresponder a uma linha de ContaAcessoTenant para o mesmo conta_acesso_id
+// e o tenant_id da UE referenciada) NAO e representavel em Prisma nem por FK
+// simples/composta -- exige constraint trigger PostgreSQL cross-table,
+// ainda NAO validada por PoC. SQL MANUAL PENDENTE DE PoC -- nao implementado
+// neste arquivo nem em nenhuma migration.
+//
+// RLS: nenhuma `CREATE POLICY`/`ENABLE ROW LEVEL SECURITY` e criada por esta
+// atualizacao -- Prisma nao modela RLS de nenhuma forma (ADR-001 V1.1 par.6).
+// A matriz conceitual de 25 tabelas (ADR-001 V1.1 par.9.1) permanece apenas
+// especificacao para uma etapa futura e separada.
+// ============================================================================
 
 generator client {
   provider = "prisma-client-js"
@@ -125,10 +186,33 @@ model UnidadeEconomica {
   status_registro String   @db.Text
   criado_em       DateTime @db.Timestamptz
   atualizado_em   DateTime @db.Timestamptz
+  /// MCD-F10002 (SEC-CHANGE-REQUEST-001 V1.1, ADR-001 V1.1 ADR-D021) --
+  /// tenant ao qual a Unidade Economica pertence. ANCORA RAIZ de todo o
+  /// modelo de isolamento -- definida na criacao da UE e nunca alterada
+  /// (Imutavel). Distinto de MCD-F10003 (tenant_id transversal, metadado
+  /// operacional) apesar do nome fisico comum -- papeis semanticos
+  /// diferentes (SEC-CHANGE-REQUEST-001 V1.1 item 7).
+  tenant_id       String   @db.Uuid
 
-  vinculo_extremidades VinculoExtremidade[]
-  cenarios_tributarios CenarioTributario[]
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Restrict)
 
+  vinculo_extremidades            VinculoExtremidade[]
+  cenarios_tributarios            CenarioTributario[]
+  receitas                        Receita[]
+  contribuicoes_previdenciarias   ContribuicaoPrevidenciaria[]
+  vinculos_previdenciarios        VinculoPrevidenciario[]
+  eventos_irpf                    EventoIRPF[]
+  documentos_fiscais              DocumentoFiscal[]
+  resultados_calculo              ResultadoCalculo[]
+  contas_acesso_unidade_economica ContaAcessoUnidadeEconomica[]
+
+  /// ADR-C011 -- chave candidata para viabilizar uma futura FK composta
+  /// (unidade_economica_id, tenant_id) a partir de qualquer tabela que
+  /// venha a denormalizar tenant_id junto de unidade_economica_id. Nenhuma
+  /// tabela usa essa FK composta nesta revisao (ADR-001 V1.1 par.4) -- os 6
+  /// hospedeiros de MCD-F10004 usam FK simples, pois nenhum deles possui
+  /// coluna tenant_id propria (SEC-001 par.11: TENANT_DERIVADO_POR_RLS).
+  @@unique([id, tenant_id], map: "uq_unidade_economica_id_tenant")
   @@map("unidade_economica")
 }
 
@@ -312,15 +396,26 @@ model Receita {
   /// fato; pode divergir de data_emissao/competencia. TIMESTAMPTZ (decisão
   /// explícita desta atualização).
   data_fato                 DateTime? @db.Timestamptz
+  /// MCD-F10004 (SEC-CHANGE-REQUEST-001 V1.1, ADR-001 V1.1 ADR-D022) --
+  /// contexto de apuracao (contexto economico/tributario), distinto e
+  /// adicional a titularidade tributaria PF/PJ acima. FK SIMPLES para
+  /// UnidadeEconomica (nao composta -- ver ADR-001 V1.1 par.4: esta tabela
+  /// nao possui coluna tenant_id propria). Mutabilidade: Versionado --
+  /// correcao controlada, preferencialmente via ConflitoDado/RevisaoTecnica
+  /// antes do UPDATE (ADR-GAP-009, preservacao historica depende de
+  /// processo, nao de mecanismo fisico).
+  unidade_economica_id      String    @db.Uuid
 
-  fonte_pagadora  FontePagadora?  @relation(fields: [fonte_pagadora_id], references: [id], onDelete: Restrict)
-  pessoa_fisica   PessoaFisica?   @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
-  pessoa_juridica PessoaJuridica? @relation(fields: [pessoa_juridica_id], references: [id], onDelete: Restrict)
+  fonte_pagadora    FontePagadora?   @relation(fields: [fonte_pagadora_id], references: [id], onDelete: Restrict)
+  pessoa_fisica     PessoaFisica?    @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
+  pessoa_juridica   PessoaJuridica?  @relation(fields: [pessoa_juridica_id], references: [id], onDelete: Restrict)
+  unidade_economica UnidadeEconomica @relation(fields: [unidade_economica_id], references: [id], onDelete: Restrict)
 
   documentos_fiscais   ReceitaDocumentoFiscal[]
   classificacoes_eqhop ClassificacaoEquiparacaoHospitalar[]
 
   @@index([competencia])
+  @@index([unidade_economica_id])
   @@map("receita")
 }
 
@@ -367,11 +462,23 @@ model DocumentoFiscal {
   /// MCD-F9007 (Errata controlada nº2, ADR-D017) — momento do registro
   /// canônico no armazenamento CONTIFISC.
   registrado_em             DateTime  @db.Timestamptz
+  /// MCD-F10004 (SEC-CHANGE-REQUEST-001 V1.1, ADR-001 V1.1 ADR-D022) --
+  /// contexto de apuracao. Atribuido de forma PROPRIA a este objeto -- nao
+  /// apenas derivado de uma Receita associada -- porque o documento fiscal
+  /// frequentemente chega antes de qualquer Receita ser lancada (nuance de
+  /// timing operacional, nao de significado -- DST-001 V1.3 par.11.1). FK
+  /// simples para UnidadeEconomica. Mutabilidade: Versionado (correcao
+  /// controlada quando a reconciliacao com uma Receita associada revelar UE
+  /// diferente da inicialmente atribuida).
+  unidade_economica_id      String    @db.Uuid
+
+  unidade_economica UnidadeEconomica @relation(fields: [unidade_economica_id], references: [id], onDelete: Restrict)
 
   receitas ReceitaDocumentoFiscal[]
   arquivos DocumentoFiscalArquivoOrigem[]
 
   @@index([chave_documento_fiscal])
+  @@index([unidade_economica_id])
   @@map("documento_fiscal")
 }
 
@@ -410,9 +517,20 @@ model ArquivoOrigem {
   /// MCD-F9007 (Errata controlada nº2 do ADR-001, ADR-D017) — momento do
   /// registro canônico no armazenamento CONTIFISC.
   registrado_em            DateTime @db.Timestamptz
+  /// MCD-F10003 (SEC-CHANGE-REQUEST-001 V1.1, ADR-001 V1.1 ADR-D023) --
+  /// metadado transversal de seguranca, carimbado pelo contexto
+  /// autenticado/autorizado da operacao de upload/importacao/coleta --
+  /// NUNCA inferido do conteudo do arquivo nem aceito como payload livre de
+  /// API. Distinto de MCD-F10002 (ancora raiz de UnidadeEconomica) apesar do
+  /// nome fisico comum. NAO inclui unidade_economica_id -- um arquivo pode
+  /// cobrir multiplas UEs do mesmo tenant (SEC-001 par.5). Imutavel.
+  tenant_id                String   @db.Uuid
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Restrict)
 
   documentos_fiscais DocumentoFiscalArquivoOrigem[]
 
+  @@index([tenant_id])
   @@map("arquivo_origem")
 }
 
@@ -510,10 +628,17 @@ model ContribuicaoPrevidenciaria {
   /// MCD-F9008 (Errata controlada nº2, ADR-D018) — data de ocorrência do
   /// fato. TIMESTAMPTZ (decisão explícita desta atualização).
   data_fato                 DateTime? @db.Timestamptz
+  /// MCD-F10004 (SEC-CHANGE-REQUEST-001 V1.1, ADR-001 V1.1 ADR-D022) --
+  /// contexto de apuracao, distinto do titular (pessoa_fisica_id). FK
+  /// simples para UnidadeEconomica. Mutabilidade: Versionado (mesma
+  /// justificativa de Receita.unidade_economica_id acima).
+  unidade_economica_id      String    @db.Uuid
 
   vinculo_previdenciario VinculoPrevidenciario? @relation(fields: [vinculo_previdenciario_id], references: [id], onDelete: Restrict)
   pessoa_fisica          PessoaFisica           @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
+  unidade_economica      UnidadeEconomica       @relation(fields: [unidade_economica_id], references: [id], onDelete: Restrict)
 
+  @@index([unidade_economica_id])
   @@map("contribuicao_previdenciaria")
 }
 
@@ -531,11 +656,17 @@ model VinculoPrevidenciario {
   /// MCD-F9007 (Errata controlada nº2 do ADR-001, ADR-D017) — momento do
   /// registro canônico no armazenamento CONTIFISC.
   registrado_em               DateTime  @db.Timestamptz
+  /// MCD-F10004 (SEC-CHANGE-REQUEST-001 V1.1, ADR-001 V1.1 ADR-D022) --
+  /// contexto de apuracao, distinto do titular (pessoa_fisica_id). FK
+  /// simples para UnidadeEconomica. Mutabilidade: Versionado.
+  unidade_economica_id        String    @db.Uuid
 
-  pessoa_fisica PessoaFisica @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
+  pessoa_fisica     PessoaFisica     @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
+  unidade_economica UnidadeEconomica @relation(fields: [unidade_economica_id], references: [id], onDelete: Restrict)
 
   contribuicoes ContribuicaoPrevidenciaria[]
 
+  @@index([unidade_economica_id])
   @@map("vinculo_previdenciario")
 }
 
@@ -586,10 +717,17 @@ model EventoIRPF {
   /// MCD-F9008 (Errata controlada nº2, ADR-D018) — data de ocorrência do
   /// fato. TIMESTAMPTZ (decisão explícita desta atualização).
   data_fato                 DateTime? @db.Timestamptz
+  /// MCD-F10004 (SEC-CHANGE-REQUEST-001 V1.1, ADR-001 V1.1 ADR-D022) --
+  /// contexto de apuracao, distinto do titular (pessoa_fisica_id) e da
+  /// fonte pagadora (identidade global). FK simples para UnidadeEconomica.
+  /// Mutabilidade: Versionado.
+  unidade_economica_id      String    @db.Uuid
 
-  pessoa_fisica  PessoaFisica   @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
-  fonte_pagadora FontePagadora? @relation(fields: [fonte_pagadora_id], references: [id], onDelete: Restrict)
+  pessoa_fisica     PessoaFisica     @relation(fields: [pessoa_fisica_id], references: [id], onDelete: Restrict)
+  fonte_pagadora    FontePagadora?   @relation(fields: [fonte_pagadora_id], references: [id], onDelete: Restrict)
+  unidade_economica UnidadeEconomica @relation(fields: [unidade_economica_id], references: [id], onDelete: Restrict)
 
+  @@index([unidade_economica_id])
   @@map("evento_irpf")
 }
 
@@ -661,13 +799,27 @@ model ResultadoCalculo {
   /// DST-E006 (fechado): PENDENTE | APROVADO | REJEITADO | AJUSTE_SOLICITADO.
   /// CHECK PostgreSQL obrigatório na migration futura (ADR-D010).
   status_revisao        String?  @db.Text
+  /// MCD-F10004 (SEC-CHANGE-REQUEST-001 V1.1, ADR-001 V1.1 ADR-D022) --
+  /// contexto de apuracao. Sempre presente, inclusive quando
+  /// cenario_tributario_id tambem esta preenchido -- os dois campos NAO sao
+  /// mutuamente exclusivos (nenhum XOR, CDC-REL-SEC-003). Quando ambos
+  /// presentes, devem ser consistentes entre si (constraint de consistencia
+  /// a decidir no ADR/PoC, nao implementada neste schema). Mutabilidade:
+  /// IMUTAVEL (diferente dos outros 5 hospedeiros de MCD-F10004) --
+  /// ResultadoCalculo e um snapshot reproduzivel; toda mudanca de contexto
+  /// exige um NOVO ResultadoCalculo (novo id, novo input_snapshot_hash),
+  /// nunca uma edicao do registro existente (MCD-001 V1.4 par.8.1,
+  /// ADR-001 V1.1 par.13.2).
+  unidade_economica_id  String   @db.Uuid
 
   /// Corrigido: Restrict (não Cascade). O ADR-001 §8 apenas menciona
   /// "possível cascade interno do cenário após política explícita" — essa
   /// política explícita ainda não existe. Restrict é a postura conservadora
   /// padrão até uma decisão futura autorizar Cascade explicitamente.
   cenario_tributario CenarioTributario? @relation(fields: [cenario_tributario_id], references: [id], onDelete: Restrict)
+  unidade_economica  UnidadeEconomica   @relation(fields: [unidade_economica_id], references: [id], onDelete: Restrict)
 
+  @@index([unidade_economica_id])
   @@map("resultado_calculo")
 }
 
@@ -686,9 +838,19 @@ model ConflitoDado {
   /// MCD-F9007 (Errata controlada nº2 do ADR-001, ADR-D017) — momento do
   /// registro canônico no armazenamento CONTIFISC.
   registrado_em   DateTime @db.Timestamptz
+  /// MCD-F10003 (SEC-CHANGE-REQUEST-001 V1.1, ADR-001 V1.1 ADR-D023) --
+  /// carimbado pelo servico de reconciliacao no momento da criacao -- nunca
+  /// escolhido arbitrariamente, nunca derivado da referencia polimorfica de
+  /// ConflitoDadoItem (objeto_id/tipo_objeto). Um ConflitoDado pode envolver
+  /// itens de mais de uma UnidadeEconomica do mesmo tenant, mas nunca de
+  /// tenants diferentes (CDC-REL-SEC-002). Imutavel.
+  tenant_id       String   @db.Uuid
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Restrict)
 
   itens ConflitoDadoItem[]
 
+  @@index([tenant_id])
   @@map("conflito_dado")
 }
 
@@ -783,7 +945,168 @@ model RevisaoTecnica {
   /// (momento do registro canônico) não foi confirmada — não resolvido por
   /// inferência. `revisado_em` permanece como já estava, sem renomeação.
   revisado_em          DateTime @db.Timestamptz
+  /// MCD-F10003 (SEC-CHANGE-REQUEST-001 V1.1, ADR-001 V1.1 ADR-D023) --
+  /// carimbado pelo processo/contexto autenticado de quem realiza a revisao
+  /// -- nunca inferido do objeto revisado (objeto_revisado_id/
+  /// tipo_objeto_revisado). A identidade especifica do revisor permanece
+  /// bloqueada (ADR-GAP-004), distinta do tenant_id da operacao. Imutavel.
+  tenant_id            String   @db.Uuid
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Restrict)
 
   @@index([objeto_revisado_id])
+  @@index([tenant_id])
   @@map("revisao_tecnica")
+}
+
+// ============================================================================
+// DOM-SEC -- Seguranca (novo nesta revisao, SEC-CHANGE-REQUEST-001 V1.1)
+// Todos os 5 models abaixo sao representacoes fisicas MINIMAS -- somente os
+// campos ja aprovados por MCD-001 V1.4/CDC-001 V1.4. Nenhum atributo de
+// autenticacao, sessao, ou detalhamento futuro e antecipado. CredencialAcesso
+// (COT-OBJ-018), Sessao, PapelAcesso e Permissao permanecem SEM model --
+// diferidos/nao-canonicos (SEC-CHANGE-REQUEST-001 V1.1).
+// ============================================================================
+
+// ============================================================================
+// COT-OBJ-019 -> MCD-F10001 -> CDC-SEC-001 -> DST-T031
+// Tenant: fronteira tecnica de isolamento, seguranca e propriedade logica
+// dos dados. NAO representa PessoaFisica, PessoaJuridica, UnidadeEconomica,
+// um usuario individual, nem necessariamente um cliente comercial
+// (SEC-001 par.1). Representacao minima deliberada (ADR-D020) --
+// detalhamento completo (nome, status) permanece bloqueado ate Change
+// Request de autenticacao/RBAC (GAP-CDC-1.3-001). Nenhum atributo
+// comercial/organizacional e adicionado.
+// ============================================================================
+model Tenant {
+  id String @id @db.Uuid
+
+  unidades_economicas UnidadeEconomica[]
+  arquivos_origem     ArquivoOrigem[]
+  conflitos_dado      ConflitoDado[]
+  revisoes_tecnicas   RevisaoTecnica[]
+  concessoes          ContaAcessoTenant[]
+
+  @@map("tenant")
+}
+
+// ============================================================================
+// COT-OBJ-020 -> MCD-F10006 -> CDC-SEC-002 -> DST-T032
+// Evento de Auditoria de Seguranca: registro imutavel de evento de
+// seguranca (login, falha de autenticacao, mudanca de permissao, elevacao
+// de privilegio, acesso sensivel, override, operacao administrativa) --
+// distinto de ConflitoDado/RevisaoTecnica (auditoria tributaria) e de log
+// tecnico generico. Nao antecipa EVT-001 (arquitetura de eventos de
+// dominio generica -- reconciliacao futura entre os dois fica para quando
+// EVT-001 existir). Representacao minima deliberada (ADR-D029) -- ator,
+// tenant, UE, operacao, objeto afetado, instante e resultado permanecem
+// bloqueados (GAP-CDC-1.3-002), dependentes de Change Request de
+// autenticacao/RBAC e, para o ator, de OBS-001. Tabela INSERT-only por
+// convencao de aplicacao -- nenhum mecanismo de banco (trigger/REVOKE)
+// impoe isso nesta etapa (ADR-001 V1.1 par.8; nao ha colunas que
+// justifiquem protecao granular ainda).
+// ============================================================================
+model EventoAuditoriaSeguranca {
+  id String @id @db.Uuid
+
+  @@map("evento_auditoria_seguranca")
+}
+
+// ============================================================================
+// COT-OBJ-017 -> MCD-F10007 -> CDC-SEC-005 -> DST-T021
+// Conta de Acesso: identidade de autenticacao/autorizacao, separada da
+// identidade tributaria (PessoaFisica/PessoaJuridica). Representacao minima
+// deliberada (ADR-D025) -- NENHUM atributo de mecanismo de autenticacao e
+// incorporado: sem email, senha, hash de senha, provider, OAuth, MFA,
+// token, refresh token, sessao, ou qualquer campo especifico de Auth.js ou
+// outro provedor. `tipo` (HUMANA/SERVICO, mencionado em SEC-001 par.13) nao
+// aprovado por nenhum Change Request -- GAP-CDC-1.4-002, explicitamente
+// diferido, nao incorporado por inferencia. CredencialAcesso (COT-OBJ-018)
+// permanece integralmente diferido -- nenhum model correspondente existe;
+// verificado que a incorporacao minima de ContaAcesso.id nao cria nenhuma
+// necessidade estrutural nova para CredencialAcesso.
+// ============================================================================
+model ContaAcesso {
+  id String @id @db.Uuid
+
+  concessoes_tenant     ContaAcessoTenant[]
+  restricoes_unidade_ec ContaAcessoUnidadeEconomica[]
+
+  @@map("conta_acesso")
+}
+
+// ============================================================================
+// COT-SUP-005 -> MCD-F10005,F10008,F10009,F10010 -> CDC-SEC-003 -> DST-T036
+// Concessao de Acesso a Tenant: materializa N:N ContaAcesso <-> Tenant, com
+// papel aberto. Nenhuma concessao e implicita (negar por padrao).
+// Unicidade logica: no maximo uma concessao por par (ADR-C012).
+// id/conta_acesso_id/tenant_id sao IMUTAVEIS (ADR-001 V1.1 par.13.2) --
+// revogar uma concessao e excluir a linha, nunca repontar a FK (mesma
+// filosofia de ReceitaDocumentoFiscal/DocumentoFiscalArquivoOrigem).
+// Vigencia/status desta concessao NAO sao contratualizados
+// (GAP-CDC-1.4-001) -- mencionados na descricao textual de COT-SUP-005
+// (COT-001 V1.2 par.4) mas nunca aprovados por nenhum Change Request; nao
+// incorporados por inferencia. Timestamps cobertos pelo mecanismo de
+// metadados transversais na materializacao fisica (MCD-001 par.9), sem
+// campo local dedicado.
+// ============================================================================
+model ContaAcessoTenant {
+  id              String @id @db.Uuid
+  conta_acesso_id String @db.Uuid
+  tenant_id       String @db.Uuid
+  /// DST-GAP-015 -- Enum/Ref aberto; catalogo de papeis de acesso ainda nao
+  /// aprovado. Nao inventar lista fechada. Nenhum Prisma enum e criado.
+  papel           String @db.Text
+
+  conta_acesso ContaAcesso @relation(fields: [conta_acesso_id], references: [id], onDelete: Restrict)
+  tenant       Tenant      @relation(fields: [tenant_id], references: [id], onDelete: Restrict)
+
+  /// ADR-C012 -- no maximo uma concessao por par (conta_acesso_id, tenant_id).
+  @@unique([conta_acesso_id, tenant_id], map: "uq_conta_acesso_tenant")
+  @@map("conta_acesso_tenant")
+}
+
+// ============================================================================
+// COT-SUP-006 -> MCD-F10005,F10008,F10011,F10012 -> CDC-SEC-004 -> DST-T037
+// Restricao de Acesso por Unidade Economica: materializa N:N opcional
+// ContaAcesso <-> UnidadeEconomica. RESTRINGE o escopo ja concedido por
+// ContaAcessoTenant -- NUNCA amplia, NUNCA substitui, NUNCA concede acesso
+// implicito a outras UEs do mesmo tenant (CDC-REL-SEC-001). Quando existir
+// ao menos uma linha para um par (ContaAcesso, Tenant), a autorizacao deve
+// considerar exclusivamente as UEs explicitamente listadas.
+// Unicidade logica: no maximo uma restricao por par (ADR-C013).
+// id/conta_acesso_id/unidade_economica_id sao IMUTAVEIS.
+//
+// ADR-C014 (invariante estrutural obrigatorio, NAO implementado neste
+// schema): toda linha desta tabela deve corresponder a uma linha de
+// ContaAcessoTenant para o mesmo conta_acesso_id e o tenant_id da UE
+// referenciada -- uma restricao sem concessao de Tenant correspondente e
+// dado invalido e nunca concede acesso por si so. Este invariante NAO e
+// expressavel por FK simples nem composta em Prisma nem em PostgreSQL
+// declarativo -- exige uma CONSTRAINT TRIGGER cross-table (mesma classe de
+// mecanismo ja validada empiricamente para ADR-C005, porem envolvendo um
+// join de resolucao unidade_economica_id -> unidade_economica.tenant_id
+// que ADR-C005 nao precisava fazer). SQL MANUAL PENDENTE DE PoC -- a
+// trigger NAO existe neste arquivo nem em nenhuma migration; deve ser
+// proposta, validada isoladamente em PostgreSQL descartavel (mesma
+// metodologia de ADR-C005) e so entao incorporada a uma migration real
+// (ADR-001 V1.1 par.5.2/par.5.3/par.19). Ate a PoC ser conduzida, a garantia
+// equivalente e responsabilidade exclusiva da camada de aplicacao.
+//
+// `papel` permanece Enum/Ref aberto (DST-GAP-015) -- nenhum enum fechado.
+// ============================================================================
+model ContaAcessoUnidadeEconomica {
+  id                   String @id @db.Uuid
+  conta_acesso_id      String @db.Uuid
+  unidade_economica_id String @db.Uuid
+  /// DST-GAP-015 -- Enum/Ref aberto; catalogo de papeis de acesso ainda nao
+  /// aprovado. Nao inventar lista fechada. Nenhum Prisma enum e criado.
+  papel                String @db.Text
+
+  conta_acesso      ContaAcesso      @relation(fields: [conta_acesso_id], references: [id], onDelete: Restrict)
+  unidade_economica UnidadeEconomica @relation(fields: [unidade_economica_id], references: [id], onDelete: Restrict)
+
+  /// ADR-C013 -- no maximo uma restricao por par (conta_acesso_id, unidade_economica_id).
+  @@unique([conta_acesso_id, unidade_economica_id], map: "uq_conta_acesso_unidade_economica")
+  @@map("conta_acesso_unidade_economica")
 }
