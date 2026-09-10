@@ -1,0 +1,72 @@
+// ============================================================================
+// PoC ADR-C014 -- schema Prisma ISOLADO, apenas para testar $transaction()
+// contra o mecanismo de banco (01_schema_fixed.sql). NAO E o schema.prisma
+// canonico do projeto -- gera um client separado, isolado neste diretorio.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated-client"
+}
+
+datasource db {
+  provider     = "postgresql"
+  url          = env("POC_DATABASE_URL")
+  relationMode = "foreignKeys"
+}
+
+model Tenant {
+  id String @id @db.Uuid
+
+  unidades_economicas UnidadeEconomica[]
+  concessoes          ContaAcessoTenant[]
+
+  @@map("tenant")
+}
+
+model UnidadeEconomica {
+  id        String @id @db.Uuid
+  tenant_id String @db.Uuid
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Restrict)
+
+  restricoes ContaAcessoUnidadeEconomica[]
+
+  @@unique([id, tenant_id])
+  @@map("unidade_economica")
+}
+
+model ContaAcesso {
+  id String @id @db.Uuid
+
+  concessoes_tenant     ContaAcessoTenant[]
+  restricoes_unidade_ec ContaAcessoUnidadeEconomica[]
+
+  @@map("conta_acesso")
+}
+
+model ContaAcessoTenant {
+  id              String @id @db.Uuid
+  conta_acesso_id String @db.Uuid
+  tenant_id       String @db.Uuid
+  papel           String @db.Text
+
+  conta_acesso ContaAcesso @relation(fields: [conta_acesso_id], references: [id], onDelete: Restrict)
+  tenant       Tenant      @relation(fields: [tenant_id], references: [id], onDelete: Restrict)
+
+  @@unique([conta_acesso_id, tenant_id])
+  @@map("conta_acesso_tenant")
+}
+
+model ContaAcessoUnidadeEconomica {
+  id                   String @id @db.Uuid
+  conta_acesso_id      String @db.Uuid
+  unidade_economica_id String @db.Uuid
+  papel                String @db.Text
+
+  conta_acesso      ContaAcesso      @relation(fields: [conta_acesso_id], references: [id], onDelete: Restrict)
+  unidade_economica UnidadeEconomica @relation(fields: [unidade_economica_id], references: [id], onDelete: Restrict)
+
+  @@unique([conta_acesso_id, unidade_economica_id])
+  @@map("conta_acesso_unidade_economica")
+}
