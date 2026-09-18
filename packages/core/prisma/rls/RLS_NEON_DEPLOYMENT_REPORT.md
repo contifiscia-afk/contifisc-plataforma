@@ -5,6 +5,11 @@
 PARADO CONFORME INSTRUÍDO, SEM REDEPLOY.** Nenhum schema, dado, policy, função ou role RLS existe
 no Neon DEV neste momento — permanece byte-a-byte no mesmo estado da baseline pós-SEC original.
 
+**ATUALIZAÇÃO FINAL (6ª sessão — ADENDO 6): `170000_rls_mediator_schema_usage` APLICADA no Neon DEV (checkpoint Git
+`69384f7`); mediator USAGE=true/CREATE=false; RLS 25/25, 30 policies; S01–S17 aprovados em DIRECT e POOLED; ADR-C005 e
+ADR-C014 preservados; cleanup completo; CRITICAL=0, RELEVANTE=0. GATE: `RLS PÓS-SEC — IMPLANTADA E VALIDADA NO NEON DEV`.
+As seções "REQUER REVISÃO" abaixo são o registro cronológico anterior, superado pelo ADENDO 6.**
+
 **ATUALIZAÇÃO (5ª sessão — ADENDO 4): sucessora `20260918160000_...` APLICADA no Neon DEV (histórico 1/2/3
 correto; status pós-deploy `up to date`; RLS 25/25, 30 policies, mediator correto). Introspecção achou que o
 mediator NÃO tem USAGE no schema `public` do Neon (7 policies inoperantes p/ runtime; fail-closed). Smoke tests
@@ -366,6 +371,154 @@ EXECUTE nas duas funções SD (esse último exige a janela de membership — ver
 ```
 RLS PÓS-SEC — DEPLOY NO NEON DEV REQUER REVISÃO
 ```
+
+---
+
+## ADENDO 6 — Deploy da `170000`, introspecção, S01–S17 no Neon DEV e cleanup (**resultado final desta etapa**)
+
+Este adendo **supera** as conclusões "REQUER REVISÃO" dos adendos anteriores (que permanecem como registro
+cronológico). Checkpoint Git prévio: commit `69384f7` (working tree limpo).
+
+### Pré-condições verificadas antes de tocar o Neon
+
+- `HEAD = 69384f7` (`feat(rls): RLS pos-SEC (ADR-002) + migrations 160000/170000 - checkpoint pre-deploy`).
+- SHA-256 do `20260918170000_rls_mediator_schema_usage/migration.sql` no working tree **e** no blob do `HEAD`
+  (byte a byte, via `git show | sha256sum`): `2576CFC3800265CA04C75458D785A8667911682307275BF33E833DC5B13C2F9F` ✔.
+  Blobs de `160000` (`aa95ddfa…2bbea`) e da inaugural (`afe59641…0e837`) também conferem.
+  (Nota: o mesmo hash calculado via *pipe* do PowerShell diverge porque o pipeline reencoda texto; a verificação válida é
+  a de bytes puros.)
+- Neon DEV (read-only): PG 18.6; baseline APPLIED; `…150000` ROLLED BACK; `…160000` APPLIED; `…170000` ausente;
+  25/25 RLS ENABLE+FORCE; 30 policies; mediator existente **sem USAGE** e sem CREATE em `public` (ACL do schema
+  `{neondb_owner=UC/neondb_owner}`); só o role `contifisc_rls_mediator` entre os `contifisc_*`; 0 dados; 4 triggers
+  ADR-C005/C014; 193 constraints / 46 índices; membership do mediator só `admin_option`, `set=false`.
+- `prisma migrate status` pré-deploy: única migration pendente = `20260918170000_rls_mediator_schema_usage`; única
+  divergência = a já aceita (rolled-back `…150000` ausente localmente). Nenhuma outra divergência.
+
+### Deploy (DIRECT)
+
+`prisma migrate deploy` → `Applying migration 20260918170000_rls_mediator_schema_usage` → **"All migrations have been
+successfully applied."** (exit 0). Sem `db push`, SQL manual, `resolve` ou edição de histórico.
+
+### Histórico Prisma final
+
+| # | migration | estado | checksum (12) |
+|---|---|---|---|
+| 1 | `20260908120000_init_baseline_fisica_pos_sec` | APPLIED | `afe5964170c5` |
+| 2 | `20260918150000_rls_tenant_isolation` | ROLLED BACK (intacta, `finished_at` nulo) | `a82e3c088e9f` |
+| 3 | `20260918160000_rls_tenant_isolation_privilege_fix` | APPLIED | `aa95ddfa90b9` |
+| 4 | `20260918170000_rls_mediator_schema_usage` | APPLIED | `2576cfc38002` |
+
+`prisma migrate status` pós-deploy **e** após o cleanup: **"Database schema is up to date!"** (exit 0).
+
+### Introspecção pós-deploy (Neon real x PG18.6 validado 2x)
+
+| Verificação | Neon DEV | Resultado |
+|---|---|---|
+| `has_schema_privilege(mediator,'public','USAGE')` | **true** | OK |
+| `has_schema_privilege(mediator,'public','CREATE')` | **false** | OK |
+| ACL do schema `public` | `{neondb_owner=UC/neondb_owner, contifisc_rls_mediator=U/neondb_owner}` (nada para PUBLIC) | OK (idêntico à réplica PG18) |
+| Mediator | NOSUPERUSER, NOLOGIN, BYPASSRLS, sem CREATEROLE/CREATEDB/REPLICATION | OK |
+| Funções SD (2) | owner = mediator; SECURITY DEFINER; `search_path=pg_catalog, public`; ACL só do mediator; PUBLIC sem EXECUTE | OK |
+| Funções leitoras de GUC (2) | owner `neondb_owner`, não-SD, EXECUTE p/ PUBLIC (por desenho) | OK |
+| SELECT do mediator | somente `conta_acesso_tenant`, `unidade_economica`, `vinculo_extremidade` | OK |
+| Membership no mediator | somente `neondb_owner` (grantor `cloud_admin`): admin=true, inherit=false, **set=false**; `pg_has_role(...,'SET')`=false | OK (resíduo documentado) |
+| RLS | 25/25 ENABLE + FORCE; `_prisma_migrations` sem RLS | OK |
+| Policies | 30 (22 ALL, 2 SELECT, 2 INSERT, 2 UPDATE, 2 DELETE); 4 por comando em Vinculo e VinculoExtremidade; só `evento_auditoria_seguranca` sem policy | OK |
+| Triggers ADR-C005 / ADR-C014 | 4 (idênticos), DEFERRABLE INITIALLY DEFERRED | OK |
+| Constraints / índices / tabelas | 193 / 46 / 26 (idêntico à baseline) | OK |
+| Roles `contifisc_*` | somente o mediator (runtime real ainda não provisionado — fora de escopo) | OK |
+
+### Revisão dos scripts 09 e 10 (antes de executar)
+
+Não foram tratados como evidência por existirem. Revisão e correções (`09_neon_smoke_s01_s17.mjs`):
+regex de erro do S09/S11 endurecidos (`/ADR-C005/`, `/ADR-C014/` em vez de `/./`); `setup` consolidado numa única
+transação (role de teste + grants mínimos + janela atômica de membership para o `EXECUTE`); `teardown-role` reescrito
+(o `DROP OWNED BY` do rascunho falhava por `INHERIT FALSE`, e o `EXECUTE` só pode ser revogado pelo mediator, então
+usa a mesma janela atômica); `node --check` OK. **Bugs achados só ao executar:** (1) a fixture falhou na 1ª tentativa
+(`cannot insert multiple commands into a prepared statement`) porque comentários no fim de linha (`...; -- Conta C`)
+fundiam statements no split; (2) S10 usava `id like` em coluna `uuid`. Na 1ª execução da suíte (banco vazio por causa do
+bug 1) só 5/16 passaram — resultado **descartado** (consequência de banco sem dados; nada foi persistido). Ambos os
+bugs foram corrigidos e a fixture recarregada com banco comprovadamente vazio antes da suíte oficial.
+`10_neon_readonly_query.mjs` (helper de consulta) executou sem alterações de comportamento.
+
+### Provisionamento do runtime sintético e janela de membership
+
+Role `contifisc_smoke_runtime`: NOSUPERUSER, **NOBYPASSRLS**, NOLOGIN, sem ownership, NOINHERIT; grants mínimos:
+USAGE em `public`, SELECT/INSERT/UPDATE/DELETE nas 25 tabelas de negócio, EXECUTE nas 2 funções SD. Como o dono das
+funções é o mediator, o `EXECUTE` exigiu **janela temporária de membership**, numa transação única:
+`GRANT contifisc_rls_mediator TO neondb_owner WITH SET TRUE, INHERIT FALSE` → `SET LOCAL ROLE contifisc_rls_mediator`
+→ `GRANT EXECUTE …` → `RESET ROLE` → `REVOKE contifisc_rls_mediator FROM neondb_owner`. Verificado depois (setup e
+teardown): membership do mediator voltou a **somente `admin_option`, `set=false`, `owner_can_set=false`**; sem SET ROLE
+residual. (A janela só funcionou porque o mediator agora tem USAGE — o mesmo passo falhou antes da `170000`.)
+Nos testes o role é assumido por `SET LOCAL ROLE` a partir da sessão do owner (equivale para RLS a um login como
+runtime, mas **não** exercita uma conexão autenticada como esse role; limitação registrada).
+
+### Smoke tests S01–S17 (dados 100% sintéticos)
+
+Executados no endpoint **DIRECT** (S15) e no **POOLED** `-pooler` com `pgbouncer=true` (S16); cada endpoint rodou a
+suíte completa: **16/16 PASS em cada um** (15 testes + veredito do endpoint).
+
+| Teste | Resultado (DIRECT e POOLED) |
+|---|---|
+| S01 Tenant A acessa o próprio tenant (receita, UE, tenant via função SD, documento, arquivo) | PASS |
+| S02 Tenant A não acessa Tenant B (8 tabelas, contagens cross-tenant = 0) | PASS |
+| S03 Conta sem concessão (Conta C) vê 0 tenants, com e sem tenant GUC | PASS |
+| S04 Contexto ausente: 0 linhas em todas as tabelas com escopo; GLOBAL (pessoa_fisica) visível; GUC vazio | PASS |
+| S05 Contexto inválido (4 variantes: texto, vazio, "null", UUID malformado): 0 linhas, sem erro | PASS |
+| S06 INSERT próprio permitido (receita, arquivo_origem) | PASS |
+| S07 INSERT cross-tenant bloqueado (receita, unidade_economica, arquivo_origem) | PASS |
+| S08 UPDATE/DELETE cross-tenant: 0 linhas afetadas; UPDATE próprio = 1; mover UE p/ tenant B bloqueado; receita B intacta | PASS |
+| S09 Vinculo novo válido (2 extremidades, commit sob runtime), visível ao Tenant A, invisível ao B; **ADR-C005**: vínculo com 1 extremidade rejeitado no COMMIT (`ADR-C005/COT-REL-NORM-001…`), nada persistiu | PASS |
+| S10 Vinculo cross-tenant: ambas UE-B bloqueado; mista A+B bloqueado; B não vê vínculos de A; A vê 1a/2a e nunca o residual 3a; nada persistiu | PASS |
+| S11 **ADR-C014**: concessão existente visível; runtime bloqueado; como owner (sem RLS) o trigger rejeita (`ADR-C014: conta_acesso_unidade_economica … sem conta_acesso_tenant correspondente`); nada persistiu | PASS |
+| S12 SET LOCAL + COMMIT: GUC visível na transação; após COMMIT GUC vazio e 0 linhas; linha persistiu | PASS |
+| S13 SET LOCAL + ROLLBACK: linha revertida; GUC vazio depois | PASS |
+| S14 Prisma `$transaction()` interativa (insert/update/delete consistentes) e em array; conexão volta a `neondb_owner`, GUC vazio | PASS |
+| S15 DIRECT (host sem `-pooler`): suíte completa | PASS |
+| S16 POOLED (host `-pooler`, transaction pooling): suíte completa | PASS |
+| S17 Reuso de conexão: 30 transações sequenciais com `connection_limit=1` alternando A/B/sem contexto/conta C, sem vazamento (nem de role, nem de GUC); 12 transações concorrentes, cada uma vendo só o próprio tenant | PASS |
+
+Observação: no POOLED o S17 reportou 1 backend distinto em `pg_backend_pid()` — coerente com `connection_limit=1`, mas
+não prova, por si só, o reuso de um mesmo backend por clientes distintos no pooler; a garantia vem de o contexto ser
+sempre `SET LOCAL` (S12/S13/S17 confirmam que nada sobrevive à transação).
+
+### Cleanup
+
+- Dados sintéticos: fixture + linhas comitadas por S09/S12 (vinculo 5, vinculo_extremidade 10, receita 4, …) removidos
+  por `TRUNCATE … CASCADE` das 25 tabelas de negócio (nunca `_prisma_migrations`) → **0 linhas**.
+- `contifisc_smoke_runtime` removido (revoke de tabelas/schema, revoke do EXECUTE via janela atômica, `DROP ROLE`) →
+  só o mediator sobra entre os `contifisc_*`; 0 ACLs de tabela com resquício; ACLs das funções SD de volta a
+  `{mediator=X/mediator}`; ACL do schema de volta a `{owner=UC, mediator=U}`; 0 schemas/objetos extras; 26 tabelas.
+- Permanecem: mediator, RLS (25/25, 30 policies), USAGE do mediator, as 4 migrations no histórico.
+- Fixtures apenas sintéticos ("Sintetica/Ficticia", CPF/CNPJ zerados); nenhum dado real jamais entrou no Neon.
+
+### Regra nova de teste (governança)
+
+**Ambientes descartáveis de segurança devem reproduzir também as ACLs de schema (e demais defaults de privilégio)
+do provedor-alvo — não apenas a versão do PostgreSQL e os roles.** (O achado do `USAGE` do mediator só apareceu no
+Neon porque a PoC herdava o `PUBLIC=U` do PostgreSQL padrão.) Complementa as regras do ADENDO 4.
+
+### Classificação final
+
+| Severidade | Qtde | Item |
+|---|---|---|
+| CRITICAL | 0 | — |
+| RELEVANTE | 0 | O achado RELEVANTE do ADENDO 4 (USAGE do mediator) foi corrigido pela `170000`, validado 2x em PG18.6 estilo Neon, aplicado e comprovado no Neon (S01–S17 direct e pooled) |
+| MENOR | 3 | (a) Janela operacional de membership no mediator para conceder/revogar EXECUTE: concedida e **revogada na mesma transação**, verificada (`set=false`); documentar no runbook de provisionamento do runtime real. (b) `neondb_owner` mantém `admin_option` no mediator (concessão do provedor; inerente ao PG16+, sem SET/INHERIT). (c) `core.autocrlf=true` sem `.gitattributes` — risco de CRLF no checkout alterar o checksum (recomendação: `packages/core/prisma/migrations/**/migration.sql text eol=lf`) |
+
+### Gate
+
+```
+RLS PÓS-SEC — IMPLANTADA E VALIDADA NO NEON DEV
+```
+
+Critérios: `170000` APPLIED ✔; mediator USAGE=true / CREATE=false ✔; 25/25 RLS ✔; 30 policies ✔; S01–S17 aprovados
+(direct e pooled) ✔; ADR-C005 ✔; ADR-C014 ✔; cleanup completo ✔; histórico Prisma coerente ✔; zero dados reais ✔;
+CRITICAL=0 ✔; RELEVANTE=0 ✔; nenhum secret ✔.
+
+**Pendências fora do escopo desta etapa:** provisionamento do runtime real (`contifisc_app`: USAGE, DML, EXECUTE via
+janela atômica), autenticação, frontend, Skills, RGT/EVT/INT. Nenhum commit/push feito nesta rodada — o relatório e
+o script `09` estão modificados no working tree aguardando o commit do Bruno.
 
 ---
 

@@ -1,7 +1,13 @@
-﻿// ATENCAO: escrito na 5a sessao; a suite 'run' AINDA NAO FOI EXECUTADA (parada por achado de USAGE do mediator).
-// Requer role de teste + provisionamento (ver RLS_NEON_DEPLOYMENT_REPORT.md, ADENDO 4). Le DATABASE_URL do .env sem imprimir.
-// Smoke tests S01-S17 da RLS no Neon DEV. Somente dados sinteticos. NUNCA imprime a connection string.
-// uso: node smoke.mjs <provision-exec|fixture|run|cleanup|teardown-role> [direct|pooled]
+﻿// Smoke tests S01-S17 da RLS no Neon DEV. Somente dados sinteticos. NUNCA imprime a connection string.
+// Le DATABASE_URL do .env. Revisado na 6a sessao (regex ADR-C005/C014 estritos; setup e teardown com janela
+// atomica de membership no mediator; DROP OWNED BY removido). Ver RLS_NEON_DEPLOYMENT_REPORT.md, ADENDO 6.
+// uso: node 09_neon_smoke_s01_s17.mjs <setup|fixture|run|cleanup|teardown-role> [direct|pooled]
+//   setup          cria contifisc_smoke_runtime (NOLOGIN, NOBYPASSRLS), grants minimos e EXECUTE nas 2 funcoes SD
+//                  (EXECUTE exige agir como o mediator: janela GRANT->SET LOCAL ROLE->REVOKE numa transacao)
+//   fixture        carrega a fixture sintetica (aborta se o banco nao estiver vazio)
+//   run            suite S01-S17 no endpoint escolhido (direct|pooled)
+//   cleanup        TRUNCATE das 25 tabelas de negocio (nunca _prisma_migrations) e confirma 0 linhas
+//   teardown-role  remove o role de teste e seus grants
 import fs from "node:fs";
 import { PrismaClient } from "file:///C:/Dev/Contifisc_Plataforma/node_modules/@prisma/client/index.js";
 
@@ -69,22 +75,30 @@ async function T(name, fn) {
 }
 
 // ---------------------------------------------------------------- comandos
-async function provisionExec() {
+const SD_FUNCS = "public.contifisc_conta_tem_acesso_tenant(uuid, uuid), public.contifisc_vinculo_tem_extremidade_no_tenant(uuid, uuid)";
+async function setup() {
+  // tudo numa unica transacao: se qualquer passo falhar, nada persiste
   await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`CREATE ROLE ${ROLE} NOSUPERUSER NOLOGIN NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT`);
+    await tx.$executeRawUnsafe(`GRANT ${ROLE} TO neondb_owner WITH SET TRUE, INHERIT FALSE`); // permite SET LOCAL ROLE nos testes
+    await tx.$executeRawUnsafe(`GRANT USAGE ON SCHEMA public TO ${ROLE}`);
+    const tabs = await tx.$queryRawUnsafe(`select tablename from pg_tables where schemaname='public' and tablename<>'_prisma_migrations' order by 1`);
+    for (const t of tabs) await tx.$executeRawUnsafe(`GRANT SELECT, INSERT, UPDATE, DELETE ON public.${t.tablename} TO ${ROLE}`);
+    // EXECUTE nas funcoes SD: o dono e o mediator -> janela atomica GRANT -> SET LOCAL ROLE -> operacao -> RESET -> REVOKE
     await tx.$executeRawUnsafe("GRANT contifisc_rls_mediator TO neondb_owner WITH SET TRUE, INHERIT FALSE");
     await tx.$executeRawUnsafe("SET LOCAL ROLE contifisc_rls_mediator");
-    await tx.$executeRawUnsafe(`GRANT EXECUTE ON FUNCTION public.contifisc_conta_tem_acesso_tenant(uuid, uuid), public.contifisc_vinculo_tem_extremidade_no_tenant(uuid, uuid) TO ${ROLE}`);
+    await tx.$executeRawUnsafe(`GRANT EXECUTE ON FUNCTION ${SD_FUNCS} TO ${ROLE}`);
     await tx.$executeRawUnsafe("RESET ROLE");
     await tx.$executeRawUnsafe("REVOKE contifisc_rls_mediator FROM neondb_owner");
-  });
-  console.log("provision-exec ok (membership temporaria concedida e revogada na mesma transacao)");
+  }, { timeout: 60000 });
+  console.log("setup ok (role de teste criado; janela de membership no mediator concedida e revogada na mesma transacao)");
 }
 
 async function fixture() {
   const nz = await prisma.$queryRawUnsafe(`select sum((xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', table_schema, table_name), false, true, '')))[1]::text::int)::int as n from information_schema.tables where table_schema='public' and table_type='BASE TABLE' and table_name<>'_prisma_migrations'`);
   if (nz[0].n !== 0) throw new Error("banco NAO esta vazio; abortando fixture");
   const sql = fs.readFileSync("C:/Dev/Contifisc_Plataforma/packages/core/prisma/rls/poc/01_fixture.sql", "utf8")
-    .split(/\r?\n/).filter((l) => !/^\s*--/.test(l)).join("\n");
+    .split(/\r?\n/).map((l) => l.replace(/--.*$/, "")).filter((l) => l.trim() !== "").join("\n"); // remove comentarios (inclusive no fim da linha)
   const stmts = sql.split(/;\s*\n/).map((s) => s.trim()).filter(Boolean);
   await prisma.$transaction(async (tx) => { for (const s of stmts) await tx.$executeRawUnsafe(s); }, { timeout: 60000 });
   console.log(`fixture ok (${stmts.length} statements, 1 transacao)`);
@@ -98,10 +112,20 @@ async function cleanup() {
 }
 
 async function teardownRole() {
-  await prisma.$executeRawUnsafe(`REVOKE ${ROLE} FROM neondb_owner`).catch((e) => console.log("revoke owner-membership: " + clean(e.message)));
-  await prisma.$executeRawUnsafe(`DROP OWNED BY ${ROLE}`);
-  await prisma.$executeRawUnsafe(`DROP ROLE ${ROLE}`);
-  console.log("role temporario removido");
+  // numa transacao: revoga os grants concedidos pelo owner (tabelas/schema) e, via janela atomica no mediator,
+  // o EXECUTE nas funcoes SD (grantor = mediator); depois DROP ROLE. Falha => nada persiste.
+  await prisma.$transaction(async (tx) => {
+    const tabs = await tx.$queryRawUnsafe(`select tablename from pg_tables where schemaname='public' and tablename<>'_prisma_migrations' order by 1`);
+    for (const t of tabs) await tx.$executeRawUnsafe(`REVOKE ALL ON public.${t.tablename} FROM ${ROLE}`);
+    await tx.$executeRawUnsafe(`REVOKE ALL ON SCHEMA public FROM ${ROLE}`);
+    await tx.$executeRawUnsafe("GRANT contifisc_rls_mediator TO neondb_owner WITH SET TRUE, INHERIT FALSE");
+    await tx.$executeRawUnsafe("SET LOCAL ROLE contifisc_rls_mediator");
+    await tx.$executeRawUnsafe(`REVOKE EXECUTE ON FUNCTION ${SD_FUNCS} FROM ${ROLE}`);
+    await tx.$executeRawUnsafe("RESET ROLE");
+    await tx.$executeRawUnsafe("REVOKE contifisc_rls_mediator FROM neondb_owner");
+    await tx.$executeRawUnsafe(`DROP ROLE ${ROLE}`);
+  }, { timeout: 60000 });
+  console.log("teardown-role ok (role de teste removido; janela de membership no mediator revogada)");
 }
 
 // ---------------------------------------------------------------- suite
@@ -198,7 +222,7 @@ async function run() {
       await tx.$executeRawUnsafe(`insert into vinculo (id, tipo_vinculo, registrado_em) values ('${v2}', 'SOCIETARIO', now())`);
       await tx.$executeRawUnsafe(`insert into vinculo_extremidade (id, vinculo_id, lado_extremidade, unidade_economica_id, registrado_em) values ('${id("ab", "0c")}', '${v2}', 'ORIGEM', '${UEA}', now())`);
       return true;
-    }, { tenant: TA, conta: CA, commit: true }), /./);
+    }, { tenant: TA, conta: CA, commit: true }), /ADR-C005/);
     const persisted = await cnt(prisma, "vinculo", `id='${v2}'`);
     return { ok: visA === 1 && visB === 0 && neg.ok && persisted === 0, detail: `criado e visivel A=${visA}, invisivel B=${visB}; ADR-C005 (1 extremidade) rejeitado=${neg.ok} persistiu=${persisted}; msg="${neg.msg.slice(0, 90)}"` };
   });
@@ -216,7 +240,7 @@ async function run() {
       return true;
     }, { tenant: TA, conta: CA, commit: true }), /row-level security/i);
     const seenB = await asRuntime((tx) => ids(tx, "vinculo", "id in ('aa000000-0000-0000-0000-00000000001a','aa000000-0000-0000-0000-00000000002a','aa000000-0000-0000-0000-00000000003a')"), { tenant: TB, conta: CB });
-    const seenA = await asRuntime((tx) => ids(tx, "vinculo", "id like 'aa000000-0000-0000-0000-00000000%' and id in ('aa000000-0000-0000-0000-00000000001a','aa000000-0000-0000-0000-00000000002a','aa000000-0000-0000-0000-00000000003a')"), { tenant: TA, conta: CA });
+    const seenA = await asRuntime((tx) => ids(tx, "vinculo", "id in ('aa000000-0000-0000-0000-00000000001a','aa000000-0000-0000-0000-00000000002a','aa000000-0000-0000-0000-00000000003a')"), { tenant: TA, conta: CA });
     const persisted = await cnt(prisma, "vinculo", `id in ('${v}','${id("aa", "11")}')`);
     return { ok: both.ok && mixed.ok && seenB.length === 0 && eq(seenA, ["aa000000-0000-0000-0000-00000000001a", "aa000000-0000-0000-0000-00000000002a"]) && persisted === 0, detail: `ambas UE-B bloqueado=${both.ok}; mista bloqueado=${mixed.ok}; B ve vinculos de A=${seenB.length}; A ve 1a/2a e nunca 3a=${eq(seenA, ["aa000000-0000-0000-0000-00000000001a", "aa000000-0000-0000-0000-00000000002a"])}; persistidos=${persisted}` };
   });
@@ -227,9 +251,9 @@ async function run() {
     // como owner (BYPASSRLS): a RLS nao intervem; o bloqueio deve vir do trigger ADR-C014
     const ow = await expectErr(prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe(`insert into conta_acesso_unidade_economica (id, conta_acesso_id, unidade_economica_id, papel) values ('${id("bb", "12")}', '${CB}', '${UEA}', 'RESTRITO_UE')`);
-    }), /./);
+    }), /ADR-C014/);
     const persisted = await cnt(prisma, "conta_acesso_unidade_economica", `id in ('${id("bb", "11")}','${id("bb", "12")}')`);
-    return { ok: pos === 1 && rt.ok && ow.ok && persisted === 0 && /adr|c014|concess|tenant/i.test(ow.msg), detail: `existente visivel=${pos}; runtime bloqueado=${rt.ok}; owner(sem RLS) bloqueado pelo trigger=${ow.ok} msg="${ow.msg.slice(0, 110)}"; persistidos=${persisted}` };
+    return { ok: pos === 1 && rt.ok && ow.ok && persisted === 0, detail: `existente visivel=${pos}; runtime bloqueado=${rt.ok}; owner(sem RLS) bloqueado pelo trigger=${ow.ok} msg="${ow.msg.slice(0, 110)}"; persistidos=${persisted}` };
   });
 
   await T("S12 SET LOCAL + COMMIT", async () => {
@@ -313,7 +337,7 @@ async function run() {
 }
 
 try {
-  if (cmd === "provision-exec") await provisionExec();
+  if (cmd === "setup") await setup();
   else if (cmd === "fixture") await fixture();
   else if (cmd === "run") await run();
   else if (cmd === "cleanup") await cleanup();
