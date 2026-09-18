@@ -1,0 +1,24 @@
+-- CONTIFISC — 20260918170000_rls_mediator_schema_usage
+--
+-- Migration incremental de correcao de ACL. NAO altera nenhuma migration anterior
+-- (20260908120000_init_baseline_fisica_pos_sec e 20260918160000_rls_tenant_isolation_privilege_fix
+-- sao historicas/imutaveis).
+--
+-- PROBLEMA (descoberto na introspeccao pos-deploy no Neon DEV — ver
+-- packages/core/prisma/rls/RLS_NEON_DEPLOYMENT_REPORT.md, ADENDO 4):
+--   No Neon, o schema `public` NAO concede USAGE a PUBLIC (ACL observado:
+--   {neondb_owner=UC/neondb_owner}). No PostgreSQL padrao (PoC anterior) o ACL inclui
+--   PUBLIC=U. Sem USAGE em `public`, o role contifisc_rls_mediator (dono das funcoes
+--   SECURITY DEFINER contifisc_conta_tem_acesso_tenant e
+--   contifisc_vinculo_tem_extremidade_no_tenant) nao consegue resolver as tabelas
+--   `public.*` referenciadas nas funcoes -> "permission denied for schema public" nas
+--   7 policies que dependem delas (tenant, vinculo x3, vinculo_extremidade x3).
+--   Falha fail-closed (erro), sem vazamento de dados.
+--
+-- CORRECAO (privilegio minimo): conceder SOMENTE USAGE ao mediator.
+--   NAO concede: CREATE, ownership, ALL, privilegios em tabelas novas, membership,
+--   LOGIN, SUPERUSER, BYPASSRLS adicional, nem qualquer privilegio a PUBLIC.
+--   Idempotente e inofensiva em ambientes cujo `public` ja tem PUBLIC=U.
+--   Executavel por migration owner NAO-SUPERUSER (dono do schema public).
+
+GRANT USAGE ON SCHEMA public TO contifisc_rls_mediator;
