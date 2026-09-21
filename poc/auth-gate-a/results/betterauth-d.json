@@ -1,0 +1,79 @@
+[
+  {
+    "group": "D-oauth",
+    "id": "OA-01",
+    "status": "PASS",
+    "title": "login OAuth/OIDC cria usuario+conta no provedor; sessao com evidencia CONTIFISC [oauth] aal1",
+    "evidence": "callback 302; sessao criada; fatores=oauth; nivel=1"
+  },
+  {
+    "group": "D-oauth",
+    "id": "OA-02",
+    "status": "PASS",
+    "title": "subject: account.accountId = 'sub' do IdP; subject CONTIFISC = user.id do provedor (nao o sub, nao e-mail)",
+    "evidence": "account.providerId=mockidp accountId=sub estavel; user.id (subject CONTIFISC)=tGJoM0..."
+  },
+  {
+    "group": "D-oauth",
+    "id": "OA-03",
+    "status": "PASS",
+    "title": "e-mail alterado NO IdP (mesmo sub) => mesmo usuario/subject => mesma ContaAcesso",
+    "evidence": "novo login com outro e-mail resolve o MESMO user.id e a MESMA ContaAcesso (identidade por sub, nao por e-mail)"
+  },
+  {
+    "group": "D-oauth",
+    "id": "OA-04",
+    "status": "PASS_COM_RESSALVA",
+    "title": "linking IMPLICITO por e-mail (default do provedor): takeover por IdP que afirma o e-mail da vitima?",
+    "evidence": "CONFIRMADO: vitima com e-mail NAO verificado => sem takeover (account_not_linked); vitima com e-mail VERIFICADO => TAKEOVER (login OAuth do atacante resolveu a ContaAcesso da vitima). Mitigacao obrigatoria: disableImplicitLinking=true (ver OA-05)"
+  },
+  {
+    "group": "D-oauth",
+    "id": "OA-05",
+    "status": "PASS",
+    "title": "MITIGACAO: disableImplicitLinking=true => login OAuth com e-mail de usuario existente e REJEITADO (sem takeover)",
+    "evidence": "callback 302 com erro (ttp://localhost:3400/api/auth/error?error=account_not_linked); nenhuma sessao criada; sem acesso a ContaAcesso da vitima"
+  },
+  {
+    "group": "D-oauth",
+    "id": "OA-06",
+    "status": "PASS",
+    "title": "linking EXPLICITO por usuario autenticado (mesmo e-mail) adiciona identidade ao MESMO usuario do provedor",
+    "evidence": "link 302; accounts=[credential,mockidp]; login OAuth posterior resolve a MESMA ContaAcesso"
+  },
+  {
+    "group": "D-oauth",
+    "id": "OA-07",
+    "status": "PASS",
+    "title": "linking explicito com e-mail DIFERENTE no IdP e rejeitado por padrao (allowDifferentEmails=false)",
+    "evidence": "link com e-mail diferente bloqueado (302); nenhuma account criada"
+  },
+  {
+    "group": "D-oauth",
+    "id": "OA-08",
+    "status": "PASS_COM_RESSALVA",
+    "title": "OAuth de usuario COM 2FA: sessao criada SEM desafio de 2o fator (bypass) - AAL da CONTIFISC continua 1; step-up eleva",
+    "evidence": "sessao OAuth criada direto (sem 2FA) mesmo com 2FA habilitado => provedor NAO impoe o 2o fator no caminho OAuth; CONTIFISC atesta nivel=1 [oauth] e nega ops aal2; apos step-up TOTP nivel=2"
+  },
+  {
+    "group": "D-oauth",
+    "id": "OA-09",
+    "status": "PASS_COM_RESSALVA",
+    "title": "amr/acr do IdP (ex.: 'mfa') NAO chegam a sessao do provedor => CONTIFISC nao pode confiar em garantia declarada pelo IdP",
+    "evidence": "mesmo com amr=['mfa','otp'] no id_token, a sessao do provedor nao expoe amr/acr; nivel CONTIFISC=1. Para confiar no MFA do IdP seria preciso capturar o id_token no callback (hook proprio) e validar emissor/politica - NAO feito; recomendacao: tratar OAuth como aal1 + step-up proprio"
+  },
+  {
+    "group": "D-oauth",
+    "id": "OA-10",
+    "status": "PASS",
+    "title": "novo usuario OAuth sem vinculo => sem acesso; nenhuma ContaAcesso criada",
+    "evidence": "IDENTIDADE_SEM_CONTA; contas antes/depois iguais"
+  },
+  {
+    "group": "D-oauth",
+    "id": "OA-11",
+    "status": "NAO_COMPROVADO",
+    "title": "Google OAuth real (client id/secret, consentimento, e-mail real)",
+    "evidence": "NAO EXECUTADO: exige criar credencial OAuth no Google Cloud Console (acao humana). O comportamento do fluxo OIDC (sub, linking, e-mail, AAL) foi provado com IdP OIDC simulado; nao ha diferenca esperada de protocolo, mas nao foi comprovado contra o Google."
+  }
+]

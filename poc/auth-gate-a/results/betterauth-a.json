@@ -1,0 +1,149 @@
+[
+  {
+    "group": "A-identidade",
+    "id": "ID-01",
+    "status": "PASS",
+    "title": "subject estavel: id do provedor nao muda quando o e-mail muda",
+    "evidence": "user.id igual; e-mail mudou; ContaAcesso resolvida igual"
+  },
+  {
+    "group": "A-identidade",
+    "id": "ID-02",
+    "status": "PASS",
+    "title": "e-mail reciclado NAO herda acesso (e-mail nao e chave)",
+    "evidence": "B com e-mail antigo de A continua ContaAcesso B"
+  },
+  {
+    "group": "A-identidade",
+    "id": "ID-03",
+    "status": "PASS",
+    "title": "novo usuario do provedor sem vinculo => sem acesso; nenhuma conta criada automaticamente",
+    "evidence": "IDENTIDADE_SEM_CONTA; contas antes/depois iguais"
+  },
+  {
+    "group": "A-identidade",
+    "id": "ID-04",
+    "status": "PASS",
+    "title": "subject alterado indevidamente na base => acesso negado (fail-closed)",
+    "evidence": "adulterado => IDENTIDADE_SEM_CONTA; restaurado => ok"
+  },
+  {
+    "group": "A-identidade",
+    "id": "ID-05",
+    "status": "PASS",
+    "title": "identidade revogada (CONTIFISC) => nega mesmo com sessao valida no provedor",
+    "evidence": "sessao do provedor ativa; CONTIFISC nega: IDENTIDADE_REVOGADA"
+  },
+  {
+    "group": "A-identidade",
+    "id": "ID-06",
+    "status": "PASS",
+    "title": "ContaAcesso suspensa + provedor ativo => nega",
+    "evidence": "CONTA_SUSPENSA"
+  },
+  {
+    "group": "A-identidade",
+    "id": "ID-07",
+    "status": "PASS",
+    "title": "usuario removido no provedor => vinculo orfao detectavel; sessoes somem; conta preservada",
+    "evidence": "delete-user 200; user removido; sessoes=0; 1 vinculo(s) orfao(s) detectado(s) por reconciliacao; ContaAcesso preservada"
+  },
+  {
+    "group": "A-identidade",
+    "id": "ID-08",
+    "status": "PASS",
+    "title": "segunda identidade (outro usuario do provedor + outro provedor) => mesma ContaAcesso, vinculo explicito",
+    "evidence": "3 identidades (2 BA + 1 clerk simulado) -> mesma ContaAcesso"
+  },
+  {
+    "group": "A-identidade",
+    "id": "ID-09",
+    "status": "PASS",
+    "title": "unicidade (provedor, emissor, subject): duplicado barrado; mesmo subject em outro emissor permitido",
+    "evidence": "P2002 no duplicado; emissor distinto aceito"
+  },
+  {
+    "group": "A-identidade",
+    "id": "ID-10",
+    "status": "PASS",
+    "title": "provider user id nao define papel: mudar user.role no provedor nao altera acesso/papel CONTIFISC",
+    "evidence": "role=admin do provedor nao concedeu nada; papel CONTIFISC intacto"
+  },
+  {
+    "group": "A-identidade",
+    "id": "TN-01",
+    "status": "PASS",
+    "title": "dois usuarios (A socio, B financeiro) no MESMO tenant: contas distintas, mesmo tenant, papeis CONTIFISC independentes",
+    "evidence": "ambos autenticam; contas distintas; papeis cliente.socio_admin | financeiro.operador; 0 tabelas de organization no provedor"
+  },
+  {
+    "group": "A-identidade",
+    "id": "TN-02",
+    "status": "PASS",
+    "title": "capabilities futuras podem divergir entre A e B (estado independente por conta)",
+    "evidence": "papel por ContaAcesso (CONTIFISC); nada do provedor participa"
+  },
+  {
+    "group": "A-identidade",
+    "id": "TN-03",
+    "status": "PASS",
+    "title": "ContaAcesso C em Tenant X e Y: autentica UMA vez; troca de tenant sem reautenticar; Z negado",
+    "evidence": "1 sessao antes/depois (1/1); X e Y ok; Z=TENANT_NAO_AUTORIZADO; nenhum organization id envolvido"
+  },
+  {
+    "group": "A-identidade",
+    "id": "IN-01",
+    "status": "PASS",
+    "title": "usuario interno autentica como os demais mas NAO recebe tenant algum",
+    "evidence": "autenticacao igual (fator pwd/aal1); 0 tenants; 4/4 negados"
+  },
+  {
+    "group": "A-identidade",
+    "id": "IN-02",
+    "status": "PASS",
+    "title": "acesso interno = concessao administrativa explicita, com vigencia (expira sozinho sem job)",
+    "evidence": "vigente -> vencida em ~1,5s; linha AINDA existe (nenhum varredor rodou) e a decisao ja e NEGADO"
+  },
+  {
+    "group": "A-identidade",
+    "id": "RV-D",
+    "status": "PASS",
+    "title": "D: ContaAcesso desativada na CONTIFISC => nega mesmo com sessao externa valida",
+    "evidence": "sessao do provedor valida; CONTA_SUSPENSA"
+  },
+  {
+    "group": "A-identidade",
+    "id": "RV-E",
+    "status": "PASS",
+    "title": "E: identidade externa revogada => nega mesmo com sessao externa valida",
+    "evidence": "sessao valida; IDENTIDADE_REVOGADA"
+  },
+  {
+    "group": "A-identidade",
+    "id": "RV-F",
+    "status": "PASS",
+    "title": "F: acesso ao Tenant removido (DELETE da concessao) => nega mesmo com sessao externa valida",
+    "evidence": "sessao valida; TENANT_NAO_AUTORIZADO"
+  },
+  {
+    "group": "A-identidade",
+    "id": "RV-G",
+    "status": "PASS",
+    "title": "tenant SUSPENSO => nega (kill switch independente do provedor)",
+    "evidence": "TENANT_NAO_AUTORIZADO"
+  },
+  {
+    "group": "A-identidade",
+    "id": "VG-01",
+    "status": "PASS",
+    "title": "vigencia: inicio<=t AND (fim IS NULL OR t<fim) - matriz de fronteiras exatas",
+    "evidence": "antes do inicio (-1ms)=false; exatamente no inicio=true; meio=true; fim -1ms=true; exatamente no fim=false; depois do fim (+1ms)=false; sem-fim depois=true antes=false"
+  },
+  {
+    "group": "A-identidade",
+    "id": "VG-02",
+    "status": "PASS",
+    "title": "vigencia futura, ativa e vencida decididas por now() do BANCO (relogio do cliente irrelevante)",
+    "evidence": "futura=false ativa=true vencida=false; podeUsarTenant(conta,tenant) nao recebe instante do cliente"
+  }
+]

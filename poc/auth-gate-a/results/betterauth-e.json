@@ -1,0 +1,79 @@
+[
+  {
+    "group": "E-passkey",
+    "id": "PK-01",
+    "status": "PASS",
+    "title": "registro de passkey exige sessao; credencial persistida (chave publica, contador, tipo)",
+    "evidence": "sem sessao=401; registro 200; passkey persistida (publicKey, counter=0, deviceType=singleDevice, backedUp=false)"
+  },
+  {
+    "group": "E-passkey",
+    "id": "PK-02",
+    "status": "PASS",
+    "title": "login com passkey (UV=true) cria sessao SEM senha; CONTIFISC atesta [passkey] aal=2 lendo o flag UV do authenticatorData",
+    "evidence": "sessao criada; fatores=passkey; nivel=2 (UV lido do authenticatorData pela CONTIFISC)"
+  },
+  {
+    "group": "E-passkey",
+    "id": "PK-03",
+    "status": "PASS_COM_RESSALVA",
+    "title": "assercao SEM UV (UV=false) com userVerification='preferred': provedor ACEITA; CONTIFISC atesta so aal=1",
+    "evidence": "provedor aceitou assercao sem UV (login 200); sem UV nao ha 2o fator => CONTIFISC atesta nivel=1 (nao presume aal2 por 'ser passkey')"
+  },
+  {
+    "group": "E-passkey",
+    "id": "PK-04",
+    "status": "PASS_COM_RESSALVA",
+    "title": "usuario com TOTP habilitado + passkey: login por passkey NAO passa pelo desafio TOTP (politica CONTIFISC decide via UV)",
+    "evidence": "sessao criada direto via passkey sem pedir TOTP (nivel CONTIFISC=2, fator unico 'passkey'). Aceitavel somente se a politica CONTIFISC tratar passkey+UV como aal2; caso contrario exigir step-up"
+  },
+  {
+    "group": "E-passkey",
+    "id": "PK-05",
+    "status": "PASS",
+    "title": "replay: reapresentar a MESMA assercao (mesmo challenge/contador) e rejeitado",
+    "evidence": "replay rejeitado (400)"
+  },
+  {
+    "group": "E-passkey",
+    "id": "PK-06",
+    "status": "PASS",
+    "title": "contador nao-monotonico (clone): assercao com contador <= armazenado e rejeitada",
+    "evidence": "1o login ok (contador 1); reuso do contador rejeitado (400)"
+  },
+  {
+    "group": "E-passkey",
+    "id": "PK-07",
+    "status": "PASS_COM_RESSALVA",
+    "title": "revogacao da passkey: apos delete, login com a credencial falha; sessoes existentes seguem ate revogacao explicita",
+    "evidence": "delete 200; login com a credencial removida=401; sessao criada antes CONTINUA valida => revogar sessoes junto (CONTIFISC)"
+  },
+  {
+    "group": "E-passkey",
+    "id": "PK-08",
+    "status": "PASS",
+    "title": "origem/RP ID errados sao rejeitados (anti-phishing)",
+    "evidence": "assercao com origin=https://evil.example rejeitada (400)"
+  },
+  {
+    "group": "E-passkey",
+    "id": "PK-09",
+    "status": "PASS_COM_RESSALVA",
+    "title": "userVerification='required' no plugin: o SERVIDOR rejeita assercao sem UV? (achado: nao impoe)",
+    "evidence": "sem UV ok=true(200) com UV ok=true(200)"
+  },
+  {
+    "group": "E-passkey",
+    "id": "PK-10",
+    "status": "NAO_COMPROVADO",
+    "title": "recuperacao de conta so-passkey (perda do dispositivo)",
+    "evidence": "nao ha fluxo nativo de recuperacao para conta sem senha: exigiria identity proofing administrativo (CONTIFISC) + novo vinculo/credencial; nao testado como fluxo ponta-a-ponta"
+  },
+  {
+    "group": "E-passkey",
+    "id": "PK-11",
+    "status": "NAO_COMPROVADO",
+    "title": "passkey em autenticador REAL (Touch ID/Windows Hello/YubiKey)",
+    "evidence": "NAO EXECUTADO: exige autenticador fisico/navegador (acao humana). O protocolo foi exercitado com autenticador por software ES256 (attestation none) contra o servidor real."
+  }
+]

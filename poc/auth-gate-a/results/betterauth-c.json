@@ -1,0 +1,107 @@
+[
+  {
+    "group": "C-mfa-aal",
+    "id": "MFA-01",
+    "status": "PASS",
+    "title": "enrolamento TOTP: exige senha; retorna URI + backup codes; 2FA so 'ativo' apos 1a verificacao",
+    "evidence": "sem senha=400; enable 200 (10 backup codes); verify-totp 200; twoFactorEnabled=true"
+  },
+  {
+    "group": "C-mfa-aal",
+    "id": "MFA-02",
+    "status": "PASS",
+    "title": "segredo TOTP e backup codes em repouso NAO estao em claro (criptografados/derivados com o secret do provedor)",
+    "evidence": "twoFactor.secret e backupCodes != valores em claro (ciphertext); exportar exige o BETTER_AUTH_SECRET"
+  },
+  {
+    "group": "C-mfa-aal",
+    "id": "MFA-03",
+    "status": "PASS",
+    "title": "senha SOZINHA para usuario com 2FA nao cria sessao (twoFactorRedirect); AAL1 nao e emitido",
+    "evidence": "twoFactorRedirect=true; sessoes antes/depois iguais; get-session=null"
+  },
+  {
+    "group": "C-mfa-aal",
+    "id": "MFA-04",
+    "status": "PASS",
+    "title": "senha + TOTP => sessao com evidencia CONTIFISC aal=2 [pwd,totp]; adapter atesta nivel 2",
+    "evidence": "verify-totp 200; nivel=2; fatores=pwd,totp; evidencia=contifisc_hook"
+  },
+  {
+    "group": "C-mfa-aal",
+    "id": "MFA-05",
+    "status": "PASS",
+    "title": "codigo TOTP errado rejeitado; lockout/contador de falhas",
+    "evidence": "6 erros => 401,400; failedVerificationCount=5; lockedUntil=nulo; codigo correto apos falhas=401"
+  },
+  {
+    "group": "C-mfa-aal",
+    "id": "MFA-06",
+    "status": "PASS_COM_RESSALVA",
+    "title": "replay do MESMO codigo TOTP na mesma janela",
+    "evidence": "mesmo codigo aceito 2x na janela (200/200) => reuso NAO rejeitado pelo provedor; mitigacao: exigir step-up com codigo novo ou rate-limit CONTIFISC"
+  },
+  {
+    "group": "C-mfa-aal",
+    "id": "MFA-07",
+    "status": "PASS",
+    "title": "backup code: funciona como 2o fator (aal=2 [pwd,backup_code]) e e de uso unico",
+    "evidence": "1o uso=200 nivel=2 fatores=pwd,backup_code; reuso=401"
+  },
+  {
+    "group": "C-mfa-aal",
+    "id": "MFA-08",
+    "status": "PASS",
+    "title": "step-up de sessao EXISTENTE aal1: reverificar TOTP eleva para aal2 por janela finita; expira",
+    "evidence": "antes=1; stepUp=true; durante=2; apos janela(3s)=1"
+  },
+  {
+    "group": "C-mfa-aal",
+    "id": "MFA-09",
+    "status": "PASS",
+    "title": "step-up com codigo errado nao eleva; sessao continua aal1",
+    "evidence": "stepUp(errado)=false; nivel permanece 1"
+  },
+  {
+    "group": "C-mfa-aal",
+    "id": "MFA-10",
+    "status": "PASS",
+    "title": "politica satisfiesAuthenticationLevel: aal1 nega, aal2 fresco permite, aal2 velho nega, step-up recente permite",
+    "evidence": "[aal1=false, aal2-fresco=true, aal2-velho=false, aal2-velho+stepup-recente=true]"
+  },
+  {
+    "group": "C-mfa-aal",
+    "id": "MFA-11",
+    "status": "PASS_COM_RESSALVA",
+    "title": "remocao do MFA: /two-factor/disable exige so a SENHA (nao o 2o fator) => CONTIFISC deve impor step-up antes",
+    "evidence": "disable=200 com sessao aal1 + senha, sem provar o 2o fator => o provedor permite DOWNGRADE de MFA; a CONTIFISC deve exigir step-up (aal2 recente) e auditar antes de expor/permitir esta rota"
+  },
+  {
+    "group": "C-mfa-aal",
+    "id": "MFA-12",
+    "status": "PASS_COM_RESSALVA",
+    "title": "perda do dispositivo/backup codes: sem fluxo de recuperacao no provedor => procedimento administrativo CONTIFISC (auditado)",
+    "evidence": "apos reset administrativo o usuario loga com aal1 e a politica CONTIFISC bloqueia operacoes que exigem aal2 (MFA_REQUERIDO) ate reenrolar; o reset em si e um caminho de privilegio => exige aprovacao dupla + auditoria"
+  },
+  {
+    "group": "C-mfa-aal",
+    "id": "MFA-13",
+    "status": "PASS",
+    "title": "MFA obrigatorio: o provedor NAO impoe 'exigir 2FA para todos' - a CONTIFISC impoe via aal na politica",
+    "evidence": "usuario sem 2FA obtem sessao aal1 no provedor; politica CONTIFISC nega operacoes aal2 => MFA_REQUERIDO (a UI leva ao enrolamento)"
+  },
+  {
+    "group": "C-mfa-aal",
+    "id": "MFA-14",
+    "status": "INFO",
+    "title": "freshAge (recencia da SESSAO) nao substitui step-up: mede criacao da sessao, nao reverificacao de fator",
+    "evidence": "session.freshAge (default 1 dia) e checado por rotas como delete-user com base em session.createdAt; nao ha 'reverificar fator' nativo => step-up e responsabilidade da CONTIFISC (MFA-08)."
+  },
+  {
+    "group": "C-mfa-aal",
+    "id": "MFA-15",
+    "status": "NAO_COMPROVADO",
+    "title": "OTP por canal (e-mail/SMS) como 2o fator",
+    "evidence": "plugin twoFactor suporta OTP via sendOTP, mas nao foi configurado nesta PoC (sem canal de envio); nao comprovado empiricamente"
+  }
+]

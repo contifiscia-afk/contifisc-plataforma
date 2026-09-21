@@ -1,0 +1,17 @@
+{
+  "name": "contifisc-gate-a-nextjs-harness",
+  "private": true,
+  "version": "0.0.0",
+  "description": "PoC DESCARTAVEL Gate A (ADR-003) - compatibilidade Next.js + Better Auth. Nao faz parte do produto.",
+  "scripts": {
+    "build": "next build",
+    "start": "next start -p 3401"
+  },
+  "dependencies": {
+    "better-auth": "1.7.5",
+    "next": "16.3.5",
+    "pg": "8.23.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}

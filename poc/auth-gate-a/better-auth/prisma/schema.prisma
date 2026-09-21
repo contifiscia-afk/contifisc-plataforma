@@ -1,0 +1,177 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String      @id
+  name             String
+  email            String
+  emailVerified    Boolean     @default(false)
+  image            String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  twoFactorEnabled Boolean?    @default(false)
+  role             String?
+  banned           Boolean?    @default(false)
+  banReason        String?
+  banExpires       DateTime?
+  sessions         Session[]
+  accounts         Account[]
+  twofactors       TwoFactor[]
+  passkeys         Passkey[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id             String   @id
+  expiresAt      DateTime
+  token          String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  ipAddress      String?
+  userAgent      String?
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  impersonatedBy String?
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model TwoFactor {
+  id                      String    @id
+  secret                  String
+  backupCodes             String
+  userId                  String
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verified                Boolean?  @default(true)
+  failedVerificationCount Int?      @default(0)
+  lockedUntil             DateTime?
+
+  @@index([secret])
+  @@index([userId])
+  @@map("twoFactor")
+}
+
+model Passkey {
+  id           String    @id
+  name         String?
+  publicKey    String
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialID String
+  counter      Int
+  deviceType   String
+  backedUp     Boolean
+  transports   String?
+  createdAt    DateTime?
+  aaguid       String?
+
+  @@index([userId])
+  @@index([credentialID])
+  @@map("passkey")
+}
+
+// ============================================================================
+// TABELAS CONTIFISC DE PoC (descartaveis, so neste harness; NAO sao o schema oficial).
+// Espelham conceitualmente ContaAcesso / IdentidadeAcessoExterna / Tenant / ContaAcessoTenant (ADR-003 rodada 2).
+// Nenhuma FK para as tabelas do provedor: o vinculo e por (provedor, emissor, subject) ? independencia do provedor.
+// ============================================================================
+model ContaAcesso {
+  id         String   @id @default(uuid()) @db.Uuid
+  tipo       String   @default("HUMANA")   // HUMANA | SERVICO
+  categoria  String   @default("CLIENTE")  // PoC apenas: CLIENTE | INTERNO (nao concede acesso a nada)
+  status     String   @default("ATIVA")    // ATIVA | SUSPENSA | ENCERRADA
+  criado_em  DateTime @default(now()) @db.Timestamptz
+  concessoes ContaAcessoTenantPoc[]
+  identidades IdentidadeAcessoExterna[]
+  @@map("conta_acesso")
+}
+
+model IdentidadeAcessoExterna {
+  id                          String   @id @default(uuid()) @db.Uuid
+  provedor                    String
+  emissor                     String
+  subject_externo             String
+  conta_acesso_id             String   @db.Uuid
+  estado                      String   @default("ATIVA") // PENDENTE | ATIVA | SUSPENSA | REVOGADA
+  criado_em                   DateTime @default(now()) @db.Timestamptz
+  atualizado_em               DateTime @default(now()) @db.Timestamptz
+  revogada_em                 DateTime? @db.Timestamptz
+  metodo_verificacao_vinculo  String?
+  conta                       ContaAcesso @relation(fields: [conta_acesso_id], references: [id])
+  @@unique([provedor, emissor, subject_externo], map: "uq_identidade_externa")
+  @@map("identidade_acesso_externa")
+}
+
+model TenantPoc {
+  id         String @id @default(uuid()) @db.Uuid
+  status     String @default("ATIVO")
+  concessoes ContaAcessoTenantPoc[]
+  @@map("tenant")
+}
+
+model ContaAcessoTenantPoc {
+  id               String    @id @default(uuid()) @db.Uuid
+  conta_acesso_id  String    @db.Uuid
+  tenant_id        String    @db.Uuid
+  papel            String
+  vigencia_inicio  DateTime  @default(now()) @db.Timestamptz
+  vigencia_fim     DateTime? @db.Timestamptz
+  origem           String    @default("REGULAR")
+  conta            ContaAcesso @relation(fields: [conta_acesso_id], references: [id])
+  tenant           TenantPoc   @relation(fields: [tenant_id], references: [id])
+  @@unique([conta_acesso_id, tenant_id], map: "uq_conta_acesso_tenant")
+  @@map("conta_acesso_tenant")
+}
+
+// Evidencia de autenticacao POR SESSAO, escrita pela CONTIFISC (hooks) ? base do AAL calculado.
+model SessaoEvidenciaAuth {
+  session_id   String   @id
+  metodos      String[]
+  aal          Int      @default(1)
+  aal_elevado_ate DateTime? @db.Timestamptz
+  criado_em    DateTime @default(now()) @db.Timestamptz
+  @@map("sessao_evidencia_auth")
+}

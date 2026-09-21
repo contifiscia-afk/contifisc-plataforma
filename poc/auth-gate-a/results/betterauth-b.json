@@ -1,0 +1,114 @@
+[
+  {
+    "group": "B-sessao",
+    "id": "SES-01",
+    "status": "PASS",
+    "title": "cookie de sessao: HttpOnly + SameSite=Lax + Path=/ ; Secure so em HTTPS (config); valor assinado",
+    "evidence": "flags: HttpOnly, SameSite=Lax, Path=/, max-age=604800s; valor assinado (token.assinatura); Secure ausente em http"
+  },
+  {
+    "group": "B-sessao",
+    "id": "SES-02",
+    "status": "PASS",
+    "title": "validacao server-side: cookie adulterado/sem assinatura => sessao invalida",
+    "evidence": "assinatura adulterada=null; token cru=null; original valido"
+  },
+  {
+    "group": "B-sessao",
+    "id": "SES-03",
+    "status": "PASS",
+    "title": "logout revoga NO SERVIDOR: cookie roubado antes do logout deixa de valer",
+    "evidence": "cookie copiado valia; apos sign-out => null (token removido no servidor)"
+  },
+  {
+    "group": "B-sessao",
+    "id": "SES-04",
+    "status": "PASS",
+    "title": "revogacao: outras sessoes / uma sessao / todas",
+    "evidence": "revoke-session (b) ok; revoke-other-sessions (d) ok e a mantida; revoke-sessions (a) ok"
+  },
+  {
+    "group": "B-sessao",
+    "id": "SES-05",
+    "status": "PASS",
+    "title": "fixation: cookie forjado pre-login nao vira sessao; login emite token NOVO",
+    "evidence": "login sobrescreve o cookie com token novo gerado no servidor; valor do atacante invalido"
+  },
+  {
+    "group": "B-sessao",
+    "id": "SES-06",
+    "status": "PASS_COM_RESSALVA",
+    "title": "login repetido: sessao ANTERIOR nao e revogada automaticamente (sem rotacao/limite)",
+    "evidence": "tokens distintos; sessao antiga continua valida ate revogacao explicita => CONTIFISC deve impor politica (max sessoes/revogar ao elevar privilegio)"
+  },
+  {
+    "group": "B-sessao",
+    "id": "SES-07",
+    "status": "PASS",
+    "title": "CSRF: POST com Origin de terceiro e bloqueado (403 INVALID_ORIGIN)",
+    "evidence": "Origin evil => 403 INVALID_ORIGIN; sem Origin => 403 MISSING_OR_NULL_ORIGIN; sessao intacta apos tentativa evil"
+  },
+  {
+    "group": "B-sessao",
+    "id": "SES-08",
+    "status": "PASS_COM_RESSALVA",
+    "title": "sessao roubada: replay com User-Agent diferente continua valido (sem binding de dispositivo)",
+    "evidence": "BA registra ip/userAgent na sessao mas NAO os impoe => CONTIFISC precisa de sinal proprio (device binding/alerta) para T8 do threat model"
+  },
+  {
+    "group": "B-sessao",
+    "id": "SES-09",
+    "status": "PASS",
+    "title": "usuario banido (admin) => sessoes revogadas e novo login bloqueado",
+    "evidence": "ban 200; 2 sessoes=null; login banido=403 BANNED_USER; apos unban=200"
+  },
+  {
+    "group": "B-sessao",
+    "id": "SES-10",
+    "status": "PASS",
+    "title": "recuperacao (reset de senha): token de uso unico; reset revoga TODAS as sessoes",
+    "evidence": "reset 200; reuso do token=400; 2 sessoes antigas revogadas; login com nova senha ok"
+  },
+  {
+    "group": "B-sessao",
+    "id": "SES-11",
+    "status": "PASS",
+    "title": "troca de senha com revokeOtherSessions revoga as demais sessoes",
+    "evidence": "change-password 200; outra sessao=null; sessao atual mantida/renovada"
+  },
+  {
+    "group": "B-sessao",
+    "id": "SES-12",
+    "status": "PASS",
+    "title": "adapter CONTIFISC: revokeAllSessions(subject) e revokeSession(id) no provedor",
+    "evidence": "revokeSession derruba so a sessao alvo; revokeAllSessions derruba o restante (via adapter)"
+  },
+  {
+    "group": "B-sessao",
+    "id": "SES-13",
+    "status": "PASS",
+    "title": "config useSecureCookies: cookie com prefixo __Secure- e flag Secure",
+    "evidence": "nome=__Secure-better-auth.session_token; Secure=true; HttpOnly=true; SameSite=Lax"
+  },
+  {
+    "group": "B-sessao",
+    "id": "SES-14",
+    "status": "PASS",
+    "title": "expiracao absoluta: sessao expira no servidor (expiresIn=2s)",
+    "evidence": "valida em t=0; invalida em t=3,2s (expiresIn=2s)"
+  },
+  {
+    "group": "B-sessao",
+    "id": "SES-15",
+    "status": "PASS",
+    "title": "refresh: uso apos updateAge estende expiresAt (sliding); sem uso expira",
+    "evidence": "expiresAt avancou 2.238s apos uso (updateAge=1s, expiresIn=10s)"
+  },
+  {
+    "group": "B-sessao",
+    "id": "SES-16",
+    "status": "PASS_COM_RESSALVA",
+    "title": "cookieCache (maxAge=60s): sessao revogada continua 'valida' para o cookie roubado; bypass a invalida",
+    "evidence": "cookie session_data presente=true; get-session default=AINDA VALIDA (stale); disableCookieCache=invalida; adapter(bypass)=invalida; adapter(sem bypass)=invalida => exige bypass do cache (ou cookieCache desligado) em toda decisao CONTIFISC"
+  }
+]

@@ -1,0 +1,51 @@
+[
+  {
+    "group": "N-nextjs14",
+    "id": "NX-01",
+    "status": "PASS",
+    "title": "Route Handler (App Router) do Better Auth: sign-up + Set-Cookie",
+    "evidence": "status 200; cookies=[better-auth.session_token]"
+  },
+  {
+    "group": "N-nextjs14",
+    "id": "NX-02",
+    "status": "PASS",
+    "title": "Server Component (RSC) valida a sessao no servidor via auth.api.getSession",
+    "evidence": "contem session:<id>=true"
+  },
+  {
+    "group": "N-nextjs14",
+    "id": "NX-03",
+    "status": "PASS",
+    "title": "RSC sem cookie => no-session",
+    "evidence": ""
+  },
+  {
+    "group": "N-nextjs14",
+    "id": "NX-04",
+    "status": "PASS",
+    "title": "middleware: sem cookie => redirect (triagem grosseira)",
+    "evidence": "status 307 -> /"
+  },
+  {
+    "group": "N-nextjs14",
+    "id": "NX-05",
+    "status": "PASS_COM_RESSALVA",
+    "title": "middleware so checa EXISTENCIA do cookie: cookie forjado PASSA o proxy, mas a pagina (servidor) nega",
+    "evidence": "status 200; corpo=UNAUTHORIZED-SERVER-SIDE => proxy NAO e autoridade; validar em toda rota/RSC/action"
+  },
+  {
+    "group": "N-nextjs14",
+    "id": "NX-06",
+    "status": "PASS",
+    "title": "sessao valida => pagina protegida renderiza (validacao no servidor)",
+    "evidence": ""
+  },
+  {
+    "group": "N-nextjs14",
+    "id": "NX-07",
+    "status": "PASS",
+    "title": "cookie adulterado (assinatura) => negado no servidor",
+    "evidence": ""
+  }
+]

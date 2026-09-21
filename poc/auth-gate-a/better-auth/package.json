@@ -1,0 +1,19 @@
+{
+  "name": "contifisc-gate-a-better-auth-poc",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "PoC DESCARTAVEL Gate A (ADR-003) - Better Auth self-hosted. Nao faz parte do produto.",
+  "scripts": {
+    "test": "node run-all.mjs"
+  },
+  "dependencies": {
+    "@better-auth/passkey": "1.7.5",
+    "@better-auth/prisma-adapter": "1.7.5",
+    "@prisma/client": "6.19.3",
+    "better-auth": "1.7.5",
+    "oauth2-mock-server": "9.2.0",
+    "otpauth": "9.5.2",
+    "prisma": "6.19.3"
+  }
+}

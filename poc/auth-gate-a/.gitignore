@@ -1,0 +1,13 @@
+node_modules/
+.next/
+.env
+.env.*
+!.env.example
+*.log
+*.pid
+cookies*.txt
+generated/
+prisma/schema-ms.prisma
+better-auth/generated/
+better-auth/prisma/schema-ms.prisma
+

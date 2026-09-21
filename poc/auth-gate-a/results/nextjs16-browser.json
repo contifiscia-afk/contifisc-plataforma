@@ -1,0 +1,23 @@
+﻿[
+    {
+        "status":  "PASS",
+        "group":  "N-nextjs16",
+        "evidence":  "cookieVisibleToJS=false; GET / =\u003e session:\u003cid\u003e",
+        "title":  "Server Action (login) com nextCookies em NAVEGADOR REAL: cookie de sessao definido HttpOnly (invisivel a document.cookie); requisicao seguinte reconhece a sessao",
+        "id":  "NX-08"
+    },
+    {
+        "status":  "PASS",
+        "group":  "N-nextjs16",
+        "evidence":  "ACTION_RESULT ok=true (log do servidor)",
+        "title":  "Server Action whoAmI COM sessao valida =\u003e ok (validacao dentro da action)",
+        "id":  "NX-09"
+    },
+    {
+        "status":  "PASS",
+        "group":  "N-nextjs16",
+        "evidence":  "ACTION_RESULT ok=false error=UNAUTHENTICATED",
+        "title":  "Server Action whoAmI apos logout =\u003e UNAUTHENTICATED (action e endpoint publico: a autorizacao esta dentro dela)",
+        "id":  "NX-10"
+    }
+]

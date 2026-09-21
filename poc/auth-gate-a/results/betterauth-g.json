@@ -1,0 +1,72 @@
+[
+  {
+    "group": "G-operacao",
+    "id": "OP-01",
+    "status": "PASS_COM_RESSALVA",
+    "title": "token de sessao em repouso: valor do cookie == session.token no banco (em claro)",
+    "evidence": "session.token guardado em claro: quem le a tabela session sequestra sessoes => tabela em schema/role dedicado (contifisc_auth), backup criptografado, sem acesso do runtime de dados"
+  },
+  {
+    "group": "G-operacao",
+    "id": "OP-02",
+    "status": "INFO",
+    "title": "hash de senha: algoritmo/formato identificaveis (portabilidade)",
+    "evidence": "account.password no formato salt(hex 16B):key(hex 64B) — scrypt customizado do Better Auth; migrar para outro provedor exige importador compativel ou reset de senha"
+  },
+  {
+    "group": "G-operacao",
+    "id": "OP-03",
+    "status": "PASS",
+    "title": "inventario de exportacao: tudo esta no NOSSO banco (SQL) — usuarios, hashes, TOTP(criptografado), passkeys, contas OAuth",
+    "evidence": "tabelas exportaveis por SELECT: account, passkey, session, twoFactor, user; API de export/import nativa: nenhuma; TOTP exige BETTER_AUTH_SECRET p/ decifrar; passkeys (credentialID+publicKey) portaveis a outro RP com o MESMO rpId/origem"
+  },
+  {
+    "group": "G-operacao",
+    "id": "OP-04",
+    "status": "PASS",
+    "title": "Organizations: PoC funciona SEM plugin organization; nenhuma tabela/campo de organizacao; sessao sem activeOrganizationId",
+    "evidence": "0 tabelas de organizacao; sessao sem activeOrganizationId; nenhuma feature testada exigiu Organization"
+  },
+  {
+    "group": "G-operacao",
+    "id": "OP-05",
+    "status": "PASS_COM_RESSALVA",
+    "title": "rate limit: default FORA de producao e desligado (15 tentativas erradas sem 429)",
+    "evidence": "codigos=401 (sem 429) => rate limit precisa ser ligado explicitamente (rateLimit.enabled) e/ou aplicado na borda; NAO depender do default"
+  },
+  {
+    "group": "G-operacao",
+    "id": "OP-06",
+    "status": "PASS",
+    "title": "rate limit LIGADO (window=10s,max=5): tentativas excedentes => 429",
+    "evidence": "9 de 12 tentativas => 429 (codigos: 401,429)"
+  },
+  {
+    "group": "G-operacao",
+    "id": "OP-07",
+    "status": "PASS",
+    "title": "cadastro publico desabilitado: /sign-up/email e recusado; usuarios so por criacao administrativa (server-side)",
+    "evidence": "sign-up publico=400 EMAIL_PASSWORD_SIGN_UP_DISABLED; admin/create-user=200; usuario criado so pelo admin; nenhuma conta criada por auto-cadastro (a CONTIFISC vincula ContaAcesso depois)"
+  },
+  {
+    "group": "G-operacao",
+    "id": "OP-08",
+    "status": "INFO",
+    "title": "evidencia de AAL gravada pela CONTIFISC: combinacoes metodo->nivel observadas nas suites",
+    "evidence": "pwd=aal1(3)"
+  },
+  {
+    "group": "G-operacao",
+    "id": "OP-09",
+    "status": "INFO",
+    "title": "versoes testadas",
+    "evidence": "better-auth=1.7.5; @better-auth/passkey=1.7.5; prisma=6.19.3; node=v24.19.0; PostgreSQL 18.6 (container descartavel)"
+  },
+  {
+    "group": "G-operacao",
+    "id": "OP-10",
+    "status": "INFO",
+    "title": "monitoramento/auditoria nativos do provedor",
+    "evidence": "Better Auth nao fornece trilha de auditoria de seguranca persistente: os eventos (login, falha, troca de fator, ban) precisam ser emitidos pela CONTIFISC via hooks (usados nesta PoC para AAL) e gravados em EventoAuditoriaSeguranca (DP-12). Logs do provedor sao apenas de aplicacao."
+  }
+]

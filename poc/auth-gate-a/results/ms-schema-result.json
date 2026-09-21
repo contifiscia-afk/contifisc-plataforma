@@ -1,0 +1,34 @@
+{
+  "steps": [
+    {
+      "name": "schema multi-schema gerado",
+      "ok": true,
+      "detail": "6 modelos do provedor => contifisc_auth; tabelas CONTIFISC => public"
+    },
+    {
+      "name": "prisma validate (multiSchema)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "prisma db push (2 schemas)",
+      "ok": true,
+      "detail": "Prisma schema loaded from prisma\\schema-ms.prisma | Datasource \"db\": PostgreSQL database \"gatea_ms\", schemas \"contifisc_auth, public\" at \"localhost:55450\""
+    },
+    {
+      "name": "prisma generate (client multiSchema)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Better Auth sign-up com tabelas em contifisc_auth",
+      "ok": true,
+      "detail": "user.id=mq535X..."
+    },
+    {
+      "name": "tabelas por schema",
+      "ok": true,
+      "detail": "{\"contifisc_auth\":[\"account\",\"passkey\",\"session\",\"twoFactor\",\"user\",\"verification\"],\"public\":[\"conta_acesso\",\"conta_acesso_tenant\",\"identidade_acesso_externa\",\"sessao_evidencia_auth\",\"tenant\"]}"
+    }
+  ]
+}
