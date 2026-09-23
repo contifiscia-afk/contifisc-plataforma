@@ -1,7 +1,8 @@
-# UPG-001 — Upgrade controlado Next.js 14.2.35 → Next.js 16.3.5
+# UPG-001 — Upgrade controlado Next.js 14.2.35 → Next.js 16.3.5 (+ UPG-001A: patch 16.3.6)
 
 **Status do documento:** DRAFT
-**Resultado UPG-001:** PASS (ver seção 12)
+**Resultado UPG-001:** PASS — baseline final Next.js 16.3.6 (ver seções 12 e 16)
+**Resultado UPG-001A:** PASS (ver seção 16)
 **Branch:** `chore/next16-upgrade`
 **Referência de rollback:** `82cad5136c36b5f44cd582cbf7e77f5949f4f27c` (checkpoint pós-Gate A, já publicado no `origin`)
 **Escopo:** pré-requisito do Gate B. **Não** é o Gate B. Nenhuma integração de Better Auth, nenhuma alteração de banco/RLS.
@@ -167,6 +168,92 @@ Referência: `82cad5136c36b5f44cd582cbf7e77f5949f4f27c`. Arquivos que seriam rev
 - Nenhum segredo, `.env` ou arquivo gerado indevido no diff.
 - Sem deploy/publicação; commit de upgrade não publicado.
 
-## 15. Resultado
+## 15. Resultado (UPG-001, antes do patch 16.3.6)
 
 **UPG-001 = PASS.** Todos os critérios atendidos: Next 16 estável instalado, React 19.3.0 suportado, Node compatível, build/typecheck/lint/testes/workspaces PASS, sem regressão funcional observada, nenhuma vulnerabilidade crítica nova, sem alterações de DB/RLS, sem Better Auth, doc completo.
+
+---
+
+## 16. UPG-001A — Security Patch 16.3.6
+
+**Motivo:** em 22/09/2026 a Vercel publicou o Next.js 16.3.6 corrigindo uma vulnerabilidade crítica de RCE em `next/og` `ImageResponse` (implementação Node.js), afetando as versões `>=16.2.0 <16.3.6`. A linha 16 precisava ser atualizada antes do Gate B.
+
+**Data da consulta:** 2026-09-23.
+
+**Fontes oficiais consultadas:**
+- Registro npm de `next` (`registry.npmjs.org/next`): `16.3.6` publicado em `2026-09-22T16:19:00Z`, `dist-tags.latest = 16.3.6`.
+- GitHub Releases, `vercel/next.js` tag `v16.3.6` (publicado em 2026-09-22T17:15:10Z): "This release contains a security fix for GHSA-vcvr-r3jv-pc5j: Remote Code Execution in next/og ImageResponse".
+- GitHub Security Advisory `GHSA-vcvr-r3jv-pc5j`: RCE na implementação Node.js de `ImageResponse` (`next/og`) quando valores controlados pelo atacante entram no conteúdo/atributos/estilo de SVG durante a geração de imagem. Severidade **Crítica**, CVSS v4 **9.5**. Versões afetadas `>=16.2.0 <16.3.6`. Versão corrigida: **16.3.6**. A implementação Edge de `ImageResponse` não é afetada.
+
+**Exposição do app principal:** nenhuma. `grep` em `apps/web` e `packages` não encontrou nenhum uso de `next/og` ou `ImageResponse`. O patch foi aplicado mesmo assim, por ser a linha 16 oficial recomendada e pré-requisito do Gate B.
+
+### 16.1 Versão anterior / nova
+
+| | Antes | Depois |
+|---|---|---|
+| `next` | 16.3.5 | **16.3.6** (exata) |
+
+Nenhuma outra dependência (React, ReactDOM, TypeScript, Tailwind, ESLint, Prisma, Vitest, Vite) foi tocada. Next 16.3.6 não exigiu nenhuma outra alteração de código, config ou peer dependency.
+
+### 16.2 Arquivos alterados
+
+- `apps/web/package.json` — `next`: `16.3.5` → `16.3.6`.
+- `package-lock.json` — apenas as entradas de `next`/`@next/*` (10 entradas, todas `16.3.5`→`16.3.6`; confirmado via diff que nenhuma outra linha de pacote foi tocada).
+- `apps/web/next-env.d.ts` — sem diff no estado final (regenerado idêntico ao commit anterior pelo `next build`; durante a checagem de `next dev` ele foi reescrito temporariamente para apontar a `.next/dev/types/*`, e restaurado por um novo `next build`).
+
+### 16.3 Instalação reprodutível
+
+- `npm install` aplicou a mudança; `npm ci` posterior não alterou o lockfile (hash idêntico antes/depois do `ci`).
+- `npm ls next` → uma única entrada, `next@16.3.6`.
+- `npm ls react react-dom` → uma única árvore coerente, `react@19.3.0` / `react-dom@19.3.0` (deduped), igual ao baseline do UPG-001.
+- `npm ls` (raiz) → sem `invalid`, `missing` ou `extraneous`.
+
+### 16.4 Typecheck limpo
+
+`tsc -b --force --pretty` → **PASS**, sem erros (não foi usado o cache incremental).
+
+### 16.5 Regressão completa
+
+| Verificação | Resultado |
+|---|---|
+| `npm run lint` | PASS |
+| `tsc -b --force` | PASS |
+| `npm test` | PASS — 7 arquivos / 24 testes (igual ao baseline) |
+| `npm run build` (limpo, `.next` removido antes) | PASS — Turbopack, Next.js 16.3.6, rotas `/` e `/_not-found` estáticas |
+| Workspaces (types/integrations/ui via `tsc -b --force`) | PASS |
+| Smoke R-01…R-09 (servidor de produção) | **9/9 PASS**, hash/estrutura equivalentes ao UPG-001 (headers e tamanho do HTML idênticos ao pós-UPG-001) |
+| `next dev` | PASS (`/` 200, título presente) |
+
+Nenhuma divergência em relação ao baseline do UPG-001.
+
+### 16.6 `npm audit`
+
+| | Crítica | Alta | Moderada | Total |
+|---|---|---|---|---|
+| Pós-UPG-001 (antes do patch) | 1 | 4 | 3 | 8 |
+| Pós-UPG-001A (16.3.6) | 1 | 4 | 3 | 8 |
+
+O patch **não alterou** o resultado do `npm audit`: a vulnerabilidade do `next/og` corrigida pelo 16.3.6 não era listada pelo `npm audit` como advisory de dependência (é uma correção de código-fonte do próprio Next, não uma dependência desatualizada). As 8 vulnerabilidades remanescentes são as mesmas de ferramental (`vitest`/`vite`/`esbuild`/`prisma`/`deepmerge-ts`/`@prisma/config`/`@vitest/mocker`/`vite-node`), pré-existentes e não relacionadas a este patch. `npm audit fix --force` não foi executado.
+
+### 16.7 `apps/web/AGENTS.md` / `apps/web/CLAUDE.md`
+
+Comportamento confirmado idêntico ao registrado no UPG-001: `next dev` (16.3.6) volta a gerar `apps/web/AGENTS.md` e `apps/web/CLAUDE.md`. Os arquivos foram movidos para fora do repositório (não commitados). `agentRules` não foi alterado nesta etapa — permanece como dívida/configuração futura (risco R-4 da seção 12).
+
+### 16.8 Banco / RLS / autenticação
+
+- `git diff` confirma: nenhuma alteração em `schema.prisma`, migrations, políticas, roles, grants ou Neon DEV.
+- Nenhuma migration executada; Neon DEV não modificado.
+- Better Auth continua ausente do app principal (0 ocorrências em `package.json`/lockfile). Nenhum login, sessão, IdentityProvider, proxy/middleware de auth, OAuth, passkey, MFA ou tabela de auth foi criado.
+- Gate B continua bloqueado.
+
+### 16.9 Critérios de PASS (UPG-001A)
+
+Todos os 14 critérios da seção 12 do prompt de execução foram atendidos: Next 16.3.6 instalado; `npm ci` reprodutível; árvore React íntegra; lint PASS; typecheck limpo PASS; 24/24 testes; build PASS; workspaces PASS; smoke 9/9 PASS; nenhuma regressão; nenhuma vulnerabilidade crítica nova; nenhuma alteração DB/RLS; Better Auth ausente; working tree só com alterações justificadas (`apps/web/package.json`, `package-lock.json`).
+
+### 16.10 Resultado
+
+**UPG-001A = PASS.**
+
+## 17. Resultado geral
+
+**UPG-001 = PASS — baseline final Next.js 16.3.6.**
